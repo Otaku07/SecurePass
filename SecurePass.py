@@ -133,7 +133,8 @@ def create_account(db_name):
     secret_question = input("Entrez votre question secrète : ")
     secret_answer = input("Entrez votre réponse secrète : ")
 
-    hashed_password, salt = hash_password(password)
+    salt = generate_salt()
+    hashed_password = derive_key(password, salt)
 
     store_in_database(db_name, username, hashed_password, salt, secret_question, secret_answer)
     print("Compte créé avec succès !")
