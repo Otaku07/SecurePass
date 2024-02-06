@@ -161,57 +161,80 @@ def view_passwords(db_name, username, encryption_key):
             print(f"{row[0]}\t{row[1]}\t{decrypted_password.decode()}")
 
 
+secret_questions = [
+    "Quel est le nom de la première rue dans laquelle vous avez habité ?",
+    "Quel est votre plat préféré ?",
+    "Quel est le nom de votre premier animal de compagnie ?",
+    "Quel est le nom de votre équipe sportive préférée ?",
+    "Quel est votre loisir préféré ?",
+    "Quel est le prénom de votre premier amour ?",
+    "Quel est le nom de votre film préféré ?",
+    "Quel est le prénom de votre grand-père / grand-mère maternelle / paternelle  ?",
+    "Où avez-vous rencontré votre partenaire actuel ?",
+    "Quelle est la marque de votre premier téléphone portable ?"
+]
+
 def create_account(db_name):
-    username = input("Entrez votre nom d'utilisateur : ")
+    def submit_form():
+        username = username_entry.get()
+        password = password_entry.get()
+        password_confirm = password_confirm_entry.get()
 
-    # Vérifie si le nom d'utilisateur existe déjà
-    existing_hashed_password, _ = retrieve_from_database(db_name, username)
-    if existing_hashed_password is not None:
-        print("Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.")
-        return
+        # Vérifie si le nom d'utilisateur existe déjà
+        existing_hashed_password, _ = retrieve_from_database(db_name, username)
+        if existing_hashed_password is not None:
+            messagebox.showerror("Erreur", "Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.")
+            return
 
-    password = getpass.getpass("Entrez votre mot de passe (il doit être composé de 14 caractères avec au moins une majuscule, une minuscule, un chiffre et un caractère spécial) : ")
-    password_confirm = getpass.getpass("Confirmez votre mot de passe : ")
+        if password != password_confirm:
+            messagebox.showerror("Erreur", "Les mots de passe ne correspondent pas. Veuillez réessayer.")
+            return
 
-    if password != password_confirm:
-        print("Les mots de passe ne correspondent pas. Veuillez réessayer.")
-        return
+        # Vérifie si le mot de passe respecte le format requis
+        if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{14,}$', password):
+            messagebox.showerror("Erreur", "Le mot de passe ne respecte pas le format requis. Veuillez réessayer.")
+            return
 
-    # Vérifie si le mot de passe respecte le format requis
-    if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{14,}$', password):
-        print("Le mot de passe ne respecte pas le format requis. Veuillez réessayer.")
-        return
+        secret_question = secret_question_var.get()
+        secret_answer = secret_answer_entry.get()
 
-    secret_questions = [
-        "Quel est le nom de la première rue dans laquelle vous avez habité ?",
-        "Quel est votre plat préféré ?",
-        "Quel est le nom de votre premier animal de compagnie ?",
-        "Quel est le nom de votre équipe sportive préférée ?",
-        "Quel est votre loisir préféré ?",
-        "Quel est le prénom de votre premier amour ?",
-        "Quel est le nom de votre film préféré ?",
-        "Quel est le prénom de votre grand-père / grand-mère maternelle / paternelle  ?",
-        "Où avez-vous rencontré votre partenaire actuel ?",
-        "Quelle est la marque de votre premier téléphone portable ?"
-    ]
+        salt = generate_salt()
+        hashed_password = derive_key(password, salt)
 
-    # ...
+        store_in_database(db_name, username, hashed_password, salt, secret_question, secret_answer)
+        messagebox.showinfo("Succès", "Compte créé avec succès !")
+        window.destroy()
 
-    print("Choisissez une question secrète :")
-    for i, question in enumerate(secret_questions, start=1):
-        print(f"{i}. {question}")
+    window = tk.Tk()
+    window.title("Créer un compte")
 
-    question_choice = int(input("Entrez le numéro de votre choix : "))
-    secret_question = secret_questions[question_choice - 1]
-    secret_answer = input("Entrez votre réponse à la question secrète : ")
+    username_label = tk.Label(window, text="Nom d'utilisateur")
+    username_entry = tk.Entry(window)
+    password_label = tk.Label(window, text="Mot de passe")
+    password_entry = tk.Entry(window, show="*")
+    password_confirm_label = tk.Label(window, text="Confirmez le mot de passe")
+    password_confirm_entry = tk.Entry(window, show="*")
+    secret_question_label = tk.Label(window, text="Question secrète")
+    secret_question_var = tk.StringVar(window)
+    secret_question_var.set("Choisissez une question secrète")
+    secret_question_optionmenu = tk.OptionMenu(window, secret_question_var, *secret_questions)
+    secret_answer_label = tk.Label(window, text="Réponse secrète")
+    secret_answer_entry = tk.Entry(window)
+    submit_button = tk.Button(window, text="Soumettre", command=submit_form)
 
-    # ...
+    username_label.pack()
+    username_entry.pack()
+    password_label.pack()
+    password_entry.pack()
+    password_confirm_label.pack()
+    password_confirm_entry.pack()
+    secret_question_label.pack()
+    secret_question_optionmenu.pack()
+    secret_answer_label.pack()
+    secret_answer_entry.pack()
+    submit_button.pack()
 
-    salt = generate_salt()
-    hashed_password = derive_key(password, salt)
-
-    store_in_database(db_name, username, hashed_password, salt, secret_question, secret_answer)
-    print("Compte créé avec succès !")
+    window.mainloop()
 
 
 def login(db_name):
