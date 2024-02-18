@@ -1,314 +1,269 @@
 import os
 import sqlite3
-import getpass
+import base64
+import secrets
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.fernet import Fernet
-import base64
-import secrets
-import hashlib
 import re
-import time
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog, ttk
 
 # Constantes
 ITERATIONS = 100000
 SALT_SIZE = 32
+DB_NAME = "SecurePassBy.db"
+
 
 def generate_salt(size=SALT_SIZE):
     return secrets.token_bytes(size)
 
 def derive_key(password, salt):
+    password = password.encode()  # Convert password to bytes if it's not already
+    salt = salt.encode()  # Convert salt to bytes if it's not already
     kdf = PBKDF2HMAC(
         algorithm=hashes.SHA256(),
-        iterations=ITERATIONS,
-        salt=salt,
         length=32,
-        backend=default_backend()
+        salt=salt,
+        iterations=100000,
     )
-    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+    key = base64.urlsafe_b64encode(kdf.derive(password))
+    return key
 
-def create_database(db_name):
-     conn = sqlite3.connect(db_name)
-     cursor = conn.cursor()
-    
-     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users
-        (username TEXT PRIMARY KEY, hashed_password TEXT, salt TEXT, secret_question TEXT, secret_answer TEXT)
-    ''')
-     cursor.execute('''
-        CREATE TABLE IF NOT EXISTS passwords
-        (username TEXT, site_name TEXT, username_site TEXT, password TEXT, salt BLOB)
-    ''')
-     conn.commit()
-     conn.close()
-
-def store_in_database(db_name, username, hashed_password, salt, secret_question, secret_answer):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO users (username, hashed_password, salt, secret_question, secret_answer)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (username, sqlite3.Binary(hashed_password), sqlite3.Binary(salt), secret_question, secret_answer))
-    conn.commit()
-    conn.close()
-
-def retrieve_secret_answer(db_name, username):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT secret_answer FROM users WHERE username = ?
-    ''', (username,))
-    row = cursor.fetchone()
-    conn.close()
-    if row is None:
-        raise Exception("Utilisateur non identifié")
-    return row[0]
-
-def retrieve_from_database(db_name, username):
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT hashed_password, salt, secret_question, secret_answer FROM users WHERE username = ?
-    ''', (username,))
-    row = cursor.fetchone()
-    conn.close()
-    if row is None:
-        return None, None, None, None
-    return bytes(row[0]), bytes(row[1]), row[2], row[3]
-
-def add_password(db_name, username, key):
-    site_name = input("Nom du site : ")
-    username_site = input("Nom d'utilisateur : ")
-    password = getpass.getpass("Mot de passe : ")
-
-    salt = generate_salt()
-    hashed_password = Fernet(key).encrypt(password.encode())
-
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''
-        INSERT INTO passwords (username, site_name, username_site, password, salt)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (username, site_name, username_site, sqlite3.Binary(hashed_password), sqlite3.Binary(salt)))
-    conn.commit()
-    conn.close()
-    print("Entrée ajoutée avec succès !")
-
-def delete_password(db_name, username):
-    # Demandez à l'utilisateur de prouver son identité
-    password = getpass.getpass("Pour supprimer un mot de passe, veuillez confirmer votre identité en entrant votre mot de passe : ")
-    hashed_password, salt, _, _ = retrieve_from_database(db_name, username)
-
-    if derive_key(password, salt) != hashed_password:
-        print("Mot de passe incorrect. Suppression annulée.")
-        return
-
-    # Récupérez la liste des sites enregistrés pour l'utilisateur
-    conn = sqlite3.connect(db_name)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT site_name FROM passwords WHERE username = ?
-    ''', (username,))
-    sites = cursor.fetchall()
-
-    # Affichez la liste des sites et demandez à l'utilisateur de choisir un site
-    print("Voici la liste de vos sites enregistrés :")
-    for i, site in enumerate(sites, start=1):
-        print(f"{i}. {site[0]}")
-
-    site_choice = input("Entrez le numéro du site pour lequel vous souhaitez supprimer le mot de passe : ")
-    site_name = sites[int(site_choice) - 1][0]
-
-    # Supprimez le mot de passe pour le site choisi
-    cursor.execute('''
-        DELETE FROM passwords WHERE username = ? AND site_name = ?
-    ''', (username, site_name))
-    conn.commit()
-    conn.close()
-
-    print("Le mot de passe a été supprimé avec succès.")
-
-def hash_password(password):
-    # Génère un sel aléatoire
-    salt = os.urandom(16)
-    # Hache le mot de passe avec le sel
-    hashed_password = hashlib.pbkdf2_hmac('sha256', password.encode(), salt, 100000)
-    return hashed_password, salt
-
-def view_passwords(db_name, username, encryption_key):
-    hashed_password, salt, _, _ = retrieve_from_database(db_name, username)
-    # Le reste du code reste le même:
-    password = getpass.getpass("Entrez à nouveau votre mot de passe de connexion pour vérification : ")
-    reponse_secrete = input("Réponse à votre question secrète : ")
-    hashed_password, salt, _, _ = retrieve_from_database(db_name, username)
-    if hashed_password is None or derive_key(password, salt) != hashed_password or reponse_secrete != retrieve_secret_answer(db_name, username):
-        print("Mot de passe ou réponse secrète invalide")
-    else:
-        conn = sqlite3.connect(db_name)
+def create_database():
+    with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT site_name, username_site, password, salt FROM passwords WHERE username = ?
-        ''', (username,))
-        rows = cursor.fetchall()
-        conn.close()
+            CREATE TABLE IF NOT EXISTS users
+            (username TEXT PRIMARY KEY, hashed_password TEXT, salt TEXT, secret_question TEXT, secret_answer TEXT)
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS passwords
+            (username TEXT, site_name TEXT, username_site TEXT, password TEXT, salt BLOB)
+        ''')
 
-        print("Nom du site\tNom d'utilisateur\tMot de passe")
-        for row in rows:
-            decrypted_password = Fernet(encryption_key).decrypt(bytes(row[2]))
-            print(f"{row[0]}\t{row[1]}\t{decrypted_password.decode()}")
+class PasswordManagerApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Password Manager")
+        self.current_username = None
+        self.encryption_key = None
+        self.login_attempts = 0  # Add a counter for login attempts
+        create_database()
+        self.show_login_screen()
+
+    def clear_screen(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    def show_login_screen(self):
+        self.clear_screen()
+
+        tk.Label(self.root, text="Username:").grid(row=0, column=0)
+        self.username_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.username_var).grid(row=0, column=1)
+
+        tk.Label(self.root, text="Password:").grid(row=1, column=0)
+        self.password_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.password_var, show='*').grid(row=1, column=1)
+
+        tk.Button(self.root, text="Login", command=self.login).grid(row=2, column=0)
+        tk.Button(self.root, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1)
+
+  
+    def ask_secret_question(self):
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT secret_question, secret_answer FROM users WHERE username=?", (self.username_var.get(),))
+            secret_question, secret_answer = cursor.fetchone()
+            user_answer = simpledialog.askstring("Secret Question", secret_question, parent=self.root)
+            if user_answer != secret_answer:
+                messagebox.showerror("Login failed", "Incorrect answer. The application will now close.")
+                self.root.destroy()
+            else:
+                messagebox.showinfo("Login", "Correct answer. You can now try to login again.")
+                self.login_attempts = 0  # Reset the counter if the answer is correct
+                self.show_login_screen()
 
 
-secret_questions = [
-    "Quel est le nom de la première rue dans laquelle vous avez habité ?",
-    "Quel est votre plat préféré ?",
-    "Quel est le nom de votre premier animal de compagnie ?",
-    "Quel est le nom de votre équipe sportive préférée ?",
-    "Quel est votre loisir préféré ?",
-    "Quel est le prénom de votre premier amour ?",
-    "Quel est le nom de votre film préféré ?",
-    "Quel est le prénom de votre grand-père / grand-mère maternelle / paternelle  ?",
-    "Où avez-vous rencontré votre partenaire actuel ?",
-    "Quelle est la marque de votre premier téléphone portable ?"
-]
+    def login(self):
+        username = self.username_var.get()
+        password = self.password_var.get()
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT hashed_password, salt FROM users WHERE username=?", (username,))
+            user = cursor.fetchone()
+            if user:
+                hashed_password, salt = user
+                if derive_key(password, salt) == hashed_password:
+                    self.current_username = username
+                    self.encryption_key = derive_key(password, salt)
+                    self.show_main_menu()
+                    self.login_attempts = 0  # Reset the counter if the login is successful
+                else:
+                    self.login_attempts += 1
+                    if self.login_attempts >= 3:
+                        messagebox.showerror("Login failed", "You have failed 3 login attempts. Please answer the secret question.")
+                        self.show_secret_question_screen()
+                    else:
+                        messagebox.showerror("Login failed", "Incorrect password")
+            else:
+                messagebox.showerror("Login failed", "User not found")
+    def show_secret_question_screen(self):
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT secret_question FROM users WHERE username=?", (self.username_var.get(),))
+            secret_question = cursor.fetchone()[0]
+            self.secret_answer_entry = tk.Entry(self.root)
+            self.secret_answer_entry.grid(row=0, column=0) 
+            self.secret_answer_button = tk.Button(self.root, text="Submit answer", command=self.check_secret_question_answer)
+            self.secret_answer_button.grid(row=1, column=0)  
+            #self.secret_question_label = tk.Label(self.root, text=secret_question)
+    def check_secret_question_answer(self):
+        user_answer = self.secret_answer_entry.get()
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT secret_answer FROM users WHERE username=?", (self.username_var.get(),))
+            correct_answer = cursor.fetchone()[0]
+        if user_answer == correct_answer:
+            self.login_attempts = 0  # Reset the counter if the answer is correct
+            self.show_login_screen()
+        else:
+            messagebox.showerror("Incorrect answer", "Incorrect answer. Please try again.")
+            
+    def show_create_account_screen(self):
+        self.clear_screen()
+        tk.Label(self.root, text="Username:").grid(row=0, column=0)
+        self.new_username_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.new_username_var).grid(row=0, column=1)
 
-def create_account(db_name):
-    def submit_form():
-        username = username_entry.get()
-        password = password_entry.get()
-        password_confirm = password_confirm_entry.get()
+        tk.Label(self.root, text="Password:").grid(row=1, column=0)
+        self.new_password_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.new_password_var, show='*').grid(row=1, column=1)
 
-        # Vérifie si le nom d'utilisateur existe déjà
-        existing_hashed_password, _ = retrieve_from_database(db_name, username)
-        if existing_hashed_password is not None:
-            messagebox.showerror("Erreur", "Ce nom d'utilisateur existe déjà. Veuillez en choisir un autre.")
+        tk.Label(self.root, text="Confirm Password:").grid(row=2, column=0)
+        self.confirm_password_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.confirm_password_var, show='*').grid(row=2, column=1)
+
+        tk.Label(self.root, text="Secret Question:").grid(row=3, column=0)
+        self.secret_question_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.secret_question_var).grid(row=3, column=1)
+
+        tk.Label(self.root, text="Secret Answer:").grid(row=4, column=0)
+        self.secret_answer_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.secret_answer_var).grid(row=4, column=1)
+
+        tk.Button(self.root, text="Create Account", command=self.create_account).grid(row=5, column=0, columnspan=2)
+
+    def create_account(self):
+        username = self.new_username_var.get()
+        password = self.new_password_var.get()
+        confirm_password = self.confirm_password_var.get()
+        secret_question = self.secret_question_var.get()
+        secret_answer = self.secret_answer_var.get()
+
+        if password != confirm_password:
+            messagebox.showerror("Error", "Passwords do not match")
             return
 
-        if password != password_confirm:
-            messagebox.showerror("Erreur", "Les mots de passe ne correspondent pas. Veuillez réessayer.")
-            return
-
-        # Vérifie si le mot de passe respecte le format requis
         if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{14,}$', password):
-            messagebox.showerror("Erreur", "Le mot de passe ne respecte pas le format requis. Veuillez réessayer.")
+            messagebox.showerror("Error", "Password does not meet complexity requirements")
             return
-
-        secret_question = secret_question_var.get()
-        secret_answer = secret_answer_entry.get()
 
         salt = generate_salt()
         hashed_password = derive_key(password, salt)
 
-        store_in_database(db_name, username, hashed_password, salt, secret_question, secret_answer)
-        messagebox.showinfo("Succès", "Compte créé avec succès !")
-        window.destroy()
+        try:
+            with sqlite3.connect(DB_NAME) as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO users (username, hashed_password, salt, secret_question, secret_answer) VALUES (?, ?, ?, ?, ?)",
+                               (username, hashed_password.hex(), salt.hex(), secret_question, secret_answer))
+                messagebox.showinfo("Success", "Account created successfully")
+                self.show_login_screen()
+        except sqlite3.IntegrityError:
+            messagebox.showerror("Error", "Username already exists")
 
-    window = tk.Tk()
-    window.title("Créer un compte")
+    def show_main_menu(self):
+        self.clear_screen()
+        tk.Button(self.root, text="Add Password", command=self.add_password_ui).grid(row=0, column=0)
+        tk.Button(self.root, text="View Passwords", command=self.view_passwords).grid(row=1, column=0)
+        tk.Button(self.root, text="Delete Password", command=self.delete_password_ui).grid(row=2, column=0)
+        tk.Button(self.root, text="Logout", command=self.logout).grid(row=3, column=0)
 
-    username_label = tk.Label(window, text="Nom d'utilisateur")
-    username_entry = tk.Entry(window)
-    password_label = tk.Label(window, text="Mot de passe")
-    password_entry = tk.Entry(window, show="*")
-    password_confirm_label = tk.Label(window, text="Confirmez le mot de passe")
-    password_confirm_entry = tk.Entry(window, show="*")
-    secret_question_label = tk.Label(window, text="Question secrète")
-    secret_question_var = tk.StringVar(window)
-    secret_question_var.set("Choisissez une question secrète")
-    secret_question_optionmenu = tk.OptionMenu(window, secret_question_var, *secret_questions)
-    secret_answer_label = tk.Label(window, text="Réponse secrète")
-    secret_answer_entry = tk.Entry(window)
-    submit_button = tk.Button(window, text="Soumettre", command=submit_form)
+    def add_password_ui(self):
+        self.clear_screen()
+        tk.Label(self.root, text="Site Name:").grid(row=0, column=0)
+        self.site_name_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.site_name_var).grid(row=0, column=1)
 
-    username_label.pack()
-    username_entry.pack()
-    password_label.pack()
-    password_entry.pack()
-    password_confirm_label.pack()
-    password_confirm_entry.pack()
-    secret_question_label.pack()
-    secret_question_optionmenu.pack()
-    secret_answer_label.pack()
-    secret_answer_entry.pack()
-    submit_button.pack()
+        tk.Label(self.root, text="Username:").grid(row=1, column=0)
+        self.site_username_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.site_username_var).grid(row=1, column=1)
 
-    window.mainloop()
+        tk.Label(self.root, text="Password:").grid(row=2, column=0)
+        self.site_password_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.site_password_var).grid(row=2, column=1)
 
+        tk.Button(self.root, text="Add", command=self.add_password).grid(row=3, column=0, columnspan=2)
 
-def login(db_name):
-    username = input("Entrez votre nom d'utilisateur : ")
-    hashed_password, salt, secret_question, secret_answer = retrieve_from_database(db_name, username)
+    def add_password(self):
+        site_name = self.site_name_var.get()
+        username_site = self.site_username_var.get()
+        password = self.site_password_var.get()
+        salt = generate_salt()
+        fernet = Fernet(self.encryption_key)
+        encrypted_password = fernet.encrypt(password.encode()).decode()
 
-    if hashed_password is None:
-        print("Ce nom d'utilisateur n'existe pas.")
-        return
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO passwords (username, site_name, username_site, password, salt) VALUES (?, ?, ?, ?, ?)",
+                           (self.current_username, site_name, username_site, encrypted_password, salt.hex()))
+            messagebox.showinfo("Success", "Password added successfully")
+            self.show_main_menu()
 
-    attempts = 0
-    while attempts < 3:
-        password = getpass.getpass("Entrez votre mot de passe : ")
+    def view_passwords(self):
+        self.clear_screen()
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT site_name, username_site, password FROM passwords WHERE username=?", (self.current_username,))
+            rows = cursor.fetchall()
+            if rows:
+                for i, (site_name, username_site, password) in enumerate(rows, start=1):
+                    fernet = Fernet(self.encryption_key)
+                    decrypted_password = fernet.decrypt(password.encode()).decode()
+                    tk.Label(self.root, text=f"{site_name} - {username_site} - {decrypted_password}").grid(row=i, column=0)
+            else:
+                tk.Label(self.root, text="No passwords saved").grid(row=0, column=0)
+        tk.Button(self.root, text="Back", command=self.show_main_menu).grid(row=len(rows) + 1, column=0)
 
-        if derive_key(password, salt) == hashed_password:
-            print("Connexion réussie !")
-            encryption_key = derive_key(password, salt)
+    def delete_password_ui(self):
+        self.clear_screen()
+        tk.Label(self.root, text="Site Name:").grid(row=0, column=0)
+        self.delete_site_name_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.delete_site_name_var).grid(row=0, column=1)
+        tk.Button(self.root, text="Delete", command=self.delete_password).grid(row=1, column=0, columnspan=2)
 
-            while True:
-                print("\nOptions:")
-                print("1. Ajouter un nouveau mot de passe")
-                print("2. Afficher tous les mots de passe")
-                print("3. Supprimer un mot de passe")
-                print("4. Se déconnecter")
-                choice = input("Entrez votre choix : ")
+    def delete_password(self):
+        site_name = self.delete_site_name_var.get()
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM passwords WHERE username=? AND site_name=?", (self.current_username, site_name))
+            if cursor.rowcount > 0:
+                messagebox.showinfo("Success", "Password deleted successfully")
+            else:
+                messagebox.showerror("Error", "No such site found")
+            self.show_main_menu()
 
-                if choice == "1":
-                    add_password(db_name, username, encryption_key)
-                elif choice == "2":
-                    view_passwords(db_name, username, encryption_key)
-                elif choice == "3":
-                    delete_password(db_name, username)
-                elif choice == "4":
-                    print("Déconnexion réussie !")
-                    break
-                else:
-                    print("Choix invalide. Veuillez réessayer !")
-            return
+    def logout(self):
+        self.current_username = None
+        self.encryption_key = None
+        self.show_login_screen()
 
-        print("Mot de passe incorrect. Veuillez réessayer.")
-        attempts += 1
-
-    print("Vous avez échoué 3 tentatives de connexion. Veuillez attendre 2 minutes avant de réessayer.")
-    time.sleep(120)  # Attendre 2 minutes
-
-    print(f"Question secrète : {secret_question}")
-    user_answer = input("Entrez votre réponse : ")
-
-    if user_answer != secret_answer:
-        print("La réponse est incorrecte. La connexion a échoué.")
-        return
-
-    print("Réponse correcte. Vous pouvez maintenant vous connecter à nouveau.")
-                
 def main():
-    db_name = "securepass.db"
-    create_database(db_name)
-
-    while True:
-        print("\nOptions:")
-        print("1. Create a new account")
-        print("2. Login")
-        print("3. Quit")
-        choice = input("Enter your choice: ")
-
-        if choice == "1":
-            create_account(db_name)
-        elif choice == "2":
-            login(db_name)
-        elif choice == "3":
-            print("Goodbye!")
-            break
-        else:
-            print("Invalid choice. Please try again!")
+    root = tk.Tk()
+    app = PasswordManagerApp(root)
+    root.mainloop()
 
 if __name__ == "__main__":
     main()
