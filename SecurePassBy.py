@@ -50,6 +50,8 @@ class PasswordManagerApp:
         self.current_username = None
         self.encryption_key = None
         self.login_attempts = 0  # Add a counter for login attempts
+        self.login_button = None
+        self.waiting = False
         create_database()
         self.show_login_screen()
 
@@ -68,7 +70,9 @@ class PasswordManagerApp:
         self.password_var = tk.StringVar()
         tk.Entry(self.root, textvariable=self.password_var, show='*').grid(row=1, column=1)
 
-        tk.Button(self.root, text="Login", command=self.login).grid(row=2, column=0)
+        #tk.Button(self.root, text="Login", command=self.login).grid(row=2, column=0)
+        self.login_button = tk.Button(self.root, text="Login", command=self.login)  # Store the login button in self.login_button
+        self.login_button.grid(row=2, column=0)
         tk.Button(self.root, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1)
 
   
@@ -103,23 +107,31 @@ class PasswordManagerApp:
                     self.login_attempts = 0  # Reset the counter if the login is successful
                 else:
                     self.login_attempts += 1
-                    if self.login_attempts >= 3:
-                        messagebox.showerror("Login failed", "You have failed 3 login attempts. Please answer the secret question.")
-                        self.show_secret_question_screen()
+                    if self.login_attempts >= 3 and not self.waiting:
+                        self.waiting = True
+                        self.login_button.config(state="disabled")  # Disable the login button
+                        messagebox.showinfo("Wait", "Please wait for 2 minutes before answering the secret question.")
+                        self.root.after(120000, self.show_secret_question_screen)  # Wait for 2 minutes (120000 milliseconds)
+
                     else:
                         messagebox.showerror("Login failed", "Incorrect password")
             else:
                 messagebox.showerror("Login failed", "User not found")
+                
     def show_secret_question_screen(self):
+        self.waiting = False
+        self.new_window = tk.Toplevel(self.root)
+        self.new_window.protocol("WM_DELETE_WINDOW", self.root.quit)  # Bind the "delete window" event to a function that quits the program
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT secret_question FROM users WHERE username=?", (self.username_var.get(),))
             secret_question = cursor.fetchone()[0]
-            self.secret_answer_entry = tk.Entry(self.root)
-            self.secret_answer_entry.grid(row=0, column=0) 
-            self.secret_answer_button = tk.Button(self.root, text="Submit answer", command=self.check_secret_question_answer)
-            self.secret_answer_button.grid(row=1, column=0)  
-            #self.secret_question_label = tk.Label(self.root, text=secret_question)
+        tk.Label(self.new_window, text=secret_question).grid(row=0, column=0)
+        self.secret_answer_entry = tk.Entry(self.new_window)
+        self.secret_answer_entry.grid(row=1, column=0)
+        self.secret_answer_button = tk.Button(self.new_window, text="Submit answer", command=self.check_secret_question_answer)
+        self.secret_answer_button.grid(row=2, column=0)
+           
     def check_secret_question_answer(self):
         user_answer = self.secret_answer_entry.get()
         with sqlite3.connect(DB_NAME) as conn:
@@ -128,9 +140,12 @@ class PasswordManagerApp:
             correct_answer = cursor.fetchone()[0]
         if user_answer == correct_answer:
             self.login_attempts = 0  # Reset the counter if the answer is correct
+            self.new_window.destroy()  # Close the secret question window
+            self.login_button.config(state="normal")  # Enable the login button
             self.show_login_screen()
         else:
-            messagebox.showerror("Incorrect answer", "Incorrect answer. Please try again.")
+            messagebox.showerror("Incorrect answer", "Incorrect answer. The program will now exit.")
+            self.root.quit()  # Exit the program
             
     def show_create_account_screen(self):
         self.clear_screen()
