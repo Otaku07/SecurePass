@@ -9,7 +9,8 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
 import re
 import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk
+from tkinter import messagebox, simpledialog, ttk, Label
+
 
 # Constantes
 ITERATIONS = 100000
@@ -19,8 +20,6 @@ DB_NAME = "SecurePassBy.db"
 
 def generate_salt(size=SALT_SIZE):
     return secrets.token_bytes(size)
-
-
 
 def derive_key(password, salt):
     kdf = PBKDF2HMAC(
@@ -56,46 +55,71 @@ def create_database():
 class PasswordManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Password Manager")
+        self.root.title("SecurePass")
+        self.root.geometry('900x500+50+50')
+        self.countdown_window = None
         self.current_username = None
         self.encryption_key = None
         self.login_attempts = 0  # Add a counter for login attempts
         self.login_button = None
         self.waiting = False
-        self.password_entry = tk.Entry(self.root)  # Add a password entry field
-        self.password_entry.pack()  # Display the password entry field
-        self.username_entry = tk.Entry(self.root)  # Create a text entry field for the username
-        self.username_entry.pack()
+        #self.password_entry = tk.Entry(self.root)  # Add a password entry field
+        #self.password_entry.pack()  # Display the password entry field
+        #self.username_entry = tk.Entry(self.root)  # Create a text entry field for the username
+        #self.username_entry.pack()
         create_database()
+        
+        
+        
+        self.root.columnconfigure(0, weight=1)  # This makes column 0 (the only column) expandable
+        self.head_title = Label(self.root, text="SecurePass Manager", font=("Arial",20), width="100",bg="blue", fg="white", padx="20", pady="20", justify="center")
+        self.head_title.grid(columnspan=3)
+        frame = tk.Frame(self.root)
+        frame.grid(row=1, column=0)
+
+
+        self.password_entry = tk.Entry(frame)  # Add a password entry field
+        self.password_entry.pack()  # Display the password entry field
+        self.username_entry = tk.Entry(frame)  # Create a text entry field for the username
+        self.username_entry.pack()
+
         self.show_login_screen()
 
     def clear_screen(self):
+        
         for widget in self.root.winfo_children():
+            # Don't destroy head_title
+            if widget == self.head_title:
+                continue
             widget.destroy()
 
     def show_login_screen(self):
         self.clear_screen()
 
-        tk.Label(self.root, text="Username:").grid(row=0, column=0)
+        # Create a new frame to contain the login screen widgets
+        login_frame = tk.Frame(self.root)
+        login_frame.grid()
+
+        # Add the widgets to the login_frame instead of self.root
+        tk.Label(login_frame, text="Username:").grid(row=0, column=0, padx=10, pady=10)
         self.username_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.username_var).grid(row=0, column=1)
+        tk.Entry(login_frame, textvariable=self.username_var).grid(row=0, column=1, padx=10, pady=10)
 
-        tk.Label(self.root, text="Password:").grid(row=1, column=0)
+        tk.Label(login_frame, text="Password:").grid(row=1, column=0, padx=10, pady=10)
         self.password_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.password_var, show='*').grid(row=1, column=1)
+        tk.Entry(login_frame, textvariable=self.password_var, show='*').grid(row=1, column=1, padx=10, pady=10)
 
-        #tk.Button(self.root, text="Login", command=self.login).grid(row=2, column=0)
-        self.login_button = tk.Button(self.root, text="Login", command=self.login)  # Store the login button in self.login_button
-        self.login_button.grid(row=2, column=0)
-        tk.Button(self.root, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1)
-
+        self.login_button = tk.Button(login_frame, text="Login", command=self.login)  # Store the login button in self.login_button
+        self.login_button.grid(row=2, column=0, padx=10, pady=10)
+        tk.Button(login_frame, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1, padx=10, pady=10)
+    
     def show_countdown(self, remaining=None):
         if remaining is not None:
             self.remaining = remaining
 
         if self.remaining <= 0:
-            self.countdown_window.destroy()
-            self.show_secret_question_screen()
+                self.countdown_window.destroy()
+                self.show_secret_question_screen()
         else:
             if not hasattr(self, 'countdown_window'):
                 self.countdown_window = tk.Toplevel(self.root)
@@ -179,6 +203,7 @@ class PasswordManagerApp:
             self.root.quit()  # Exit the program
             
     def show_create_account_screen(self):
+        
         self.clear_screen()
         tk.Label(self.root, text="Username:").grid(row=0, column=0)
         self.new_username_var = tk.StringVar()
