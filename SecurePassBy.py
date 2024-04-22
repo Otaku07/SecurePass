@@ -2,14 +2,14 @@ import os
 import sqlite3
 import base64
 import secrets
+from tkinter import messagebox, simpledialog, ttk, Label
+import re
+import tkinter as tk
 import bcrypt
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
-import re
-import tkinter as tk
-from tkinter import messagebox, simpledialog, ttk, Label
 
 
 # Constantes
@@ -40,12 +40,23 @@ def decrypt_data(data, key):
     fernet = Fernet(key)
     return fernet.decrypt(data.encode()).decode()
 
+def user_exists(username):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM users WHERE username=?", (username,))
+    user = cursor.fetchone()
+
+    conn.close()
+
+    return user is not None
+
 def create_database():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users
-            (username TEXT PRIMARY KEY, hashed_password TEXT, salt TEXT, secret_question TEXT, secret_answer TEXT)
+            (username TEXT PRIMARY KEY, hashed_password TEXT, salt TEXT)
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS passwords
@@ -63,10 +74,7 @@ class PasswordManagerApp:
         self.login_attempts = 0  # Add a counter for login attempts
         self.login_button = None
         self.waiting = False
-        #self.password_entry = tk.Entry(self.root)  # Add a password entry field
-        #self.password_entry.pack()  # Display the password entry field
-        #self.username_entry = tk.Entry(self.root)  # Create a text entry field for the username
-        #self.username_entry.pack()
+        
         create_database()
         
         
@@ -84,6 +92,14 @@ class PasswordManagerApp:
         self.username_entry.pack()
 
         self.show_login_screen()
+    
+    @staticmethod
+    def user_exists(username):
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM users WHERE username=?", (username,))
+            user = cursor.fetchone()
+        return user is not None
 
     def clear_screen(self):
         
@@ -97,52 +113,68 @@ class PasswordManagerApp:
         self.clear_screen()
 
         # Create a new frame to contain the login screen widgets
-        login_frame = tk.Frame(self.root)
-        login_frame.grid()
+        self.login_frame = tk.Frame(self.root)
+        self.login_frame.grid()
 
         # Add the widgets to the login_frame instead of self.root
-        tk.Label(login_frame, text="Username:").grid(row=0, column=0, padx=10, pady=10)
+        tk.Label(self.login_frame, text="Username:").grid(row=0, column=0, padx=10, pady=10)
         self.username_var = tk.StringVar()
-        tk.Entry(login_frame, textvariable=self.username_var).grid(row=0, column=1, padx=10, pady=10)
+        tk.Entry(self.login_frame, textvariable=self.username_var).grid(row=0, column=1, padx=10, pady=10)
 
-        tk.Label(login_frame, text="Password:").grid(row=1, column=0, padx=10, pady=10)
+        tk.Label(self.login_frame, text="Password:").grid(row=1, column=0, padx=10, pady=10)
         self.password_var = tk.StringVar()
-        tk.Entry(login_frame, textvariable=self.password_var, show='*').grid(row=1, column=1, padx=10, pady=10)
+        tk.Entry(self.login_frame, textvariable=self.password_var, show='*').grid(row=1, column=1, padx=10, pady=10)
 
-        self.login_button = tk.Button(login_frame, text="Login", command=self.login)  # Store the login button in self.login_button
+        self.login_button = tk.Button(self.login_frame, text="Login", command=self.login)  # Store the login button in self.login_button
         self.login_button.grid(row=2, column=0, padx=10, pady=10)
-        tk.Button(login_frame, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1, padx=10, pady=10)
+        self.create_account_button = tk.Button(self.login_frame, text="Create Account", command=self.show_create_account_screen)
+        self.create_account_button.grid(row=2, column=1, padx=10, pady=10)
+        #tk.Button(login_frame, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1, padx=10, pady=10)
     
+    def disable_login_interface(self, disable=True):
+        """ Désactiver ou activer les éléments de l'interface de connexion """
+        state = 'disabled' if disable else 'normal'
+        # Désactiver tout le cadre de connexion
+        for child in self.login_frame.winfo_children():
+            # Utilise try-except pour éviter les erreurs si un widget ne peut pas être désactivé
+            try:
+                child.configure(state=state)
+            except tk.TclError:
+                pass
+
+
+
     def show_countdown(self, remaining=None):
+        if self.waiting and remaining is None:
+            return  # Prévenir les multiples comptes à rebours simultanés
+
         if remaining is not None:
             self.remaining = remaining
 
         if self.remaining <= 0:
+            self.disable_login_interface(False)  # Réactiver l'interface de connexion
+            if self.countdown_window is not None:
                 self.countdown_window.destroy()
-                self.show_secret_question_screen()
+                self.countdown_window = None  # Important pour éviter de réutiliser une fenêtre détruite
+            self.waiting = False
+            self.username_var.set('')
+            self.password_var.set('')
         else:
-            if not hasattr(self, 'countdown_window'):
+            if self.countdown_window is None:  # Créer la fenêtre si elle n'existe pas déjà
                 self.countdown_window = tk.Toplevel(self.root)
-                self.countdown_window.protocol("WM_DELETE_WINDOW", self.root.quit)
-                self.countdown_label = tk.Label(self.countdown_window)
+                self.countdown_window.protocol("WM_DELETE_WINDOW", self.force_close_application)  # Désactiver la fermeture via la croix
+                self.countdown_label = tk.Label(self.countdown_window, text="")
                 self.countdown_label.pack()
-            self.countdown_label.config(text="Vous vous êtes trompé trois fois. Pour vous connecter merci d'attendre %d secondes" % self.remaining)
-            self.remaining = self.remaining - 1
+
+            # Mettre à jour le texte du compte à rebours
+            if self.countdown_window.winfo_exists() and self.countdown_label.winfo_exists():
+                self.countdown_label.config(text=f"Vous vous êtes trompé trois fois. Pour vous connecter merci d'attendre {self.remaining} secondes")
+            self.remaining -= 1
             self.root.after(1000, self.show_countdown)
-  
-    def ask_secret_question(self):
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT secret_question, secret_answer FROM users WHERE username=?", (self.username_var.get(),))
-            secret_question, secret_answer = cursor.fetchone()
-            user_answer = simpledialog.askstring("Secret Question", secret_question, parent=self.root)
-            if user_answer != secret_answer:
-                messagebox.showerror("Login failed", "Incorrect answer. The application will now close.")
-                self.root.destroy()
-            else:
-                messagebox.showinfo("Login", "Correct answer. You can now try to login again.")
-                self.login_attempts = 0  # Reset the counter if the answer is correct
-                self.show_login_screen()
+            
+    def force_close_application(self):
+        """ Force la fermeture de l'application """
+        self.root.destroy()
 
 
     def login(self):
@@ -152,6 +184,11 @@ class PasswordManagerApp:
             cursor = conn.cursor()
             cursor.execute("SELECT hashed_password FROM users WHERE username=?", (username,))
             user = cursor.fetchone()
+            if not self.user_exists(username):
+                messagebox.showerror("Erreur", "Utilisateur introuvable, veuillez réessayer")
+                self.username_var.set('')
+                self.password_var.set('')
+                return
             if user:
                 hashed_password = user[0].encode('utf-8')  # Convertir le hash du mot de passe en bytes
                 if bcrypt.checkpw(password, hashed_password):  # Utiliser bcrypt.checkpw pour vérifier le mot de passe
@@ -159,48 +196,19 @@ class PasswordManagerApp:
                     self.current_username = username
                     self.encryption_key = Fernet.generate_key()
                     self.show_main_menu()
-                    self.login_attempts = 0  # Reset the counter if the login is successful
                 else:
-                    self.login_attempts += 1
-                    if self.login_attempts >= 3 and not self.waiting:
-                        self.waiting = True
-                        self.login_button.config(state="disabled")  # Disable the login button
-                        self.show_countdown(120)  # Show a countdown of 2 minutes
-                    else:
-                        messagebox.showerror("Login failed", "Incorrect password")
-            else:
-                messagebox.showerror("Login failed", "User not found")
+                    if self.waiting:
+                        return  # Do not process login attempts while waiting
 
-                
-    def show_secret_question_screen(self):
-        self.waiting = False
-        self.new_window = tk.Toplevel(self.root)
-        self.new_window.protocol("WM_DELETE_WINDOW", self.root.quit)  # Bind the "delete window" event to a function that quits the program
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT secret_question FROM users WHERE username=?", (self.username_var.get(),))
-            secret_question = cursor.fetchone()[0]
-        tk.Label(self.new_window, text=secret_question).grid(row=0, column=0)
-        self.secret_answer_entry = tk.Entry(self.new_window)
-        self.secret_answer_entry.grid(row=1, column=0)
-        self.secret_answer_button = tk.Button(self.new_window, text="Submit answer", command=self.check_secret_question_answer)
-        self.secret_answer_button.grid(row=2, column=0)
-           
-    def check_secret_question_answer(self):
-        user_answer = self.secret_answer_entry.get()
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT secret_answer FROM users WHERE username=?", (self.username_var.get(),))
-            correct_answer = cursor.fetchone()[0]
-        if user_answer == correct_answer:
-            self.login_attempts = 0  # Reset the counter if the answer is correct
-            self.waiting = False
-            self.new_window.destroy()  # Close the secret question window
-            self.login_button.config(state="normal")  # Enable the login button
-            self.show_login_screen()
-        else:
-            messagebox.showerror("Incorrect answer", "Incorrect answer. The program will now exit.")
-            self.root.quit()  # Exit the program
+                    self.login_attempts += 1
+                    if self.login_attempts >= 3:
+                        self.disable_login_interface(True)  # Désactiver l'interface login
+                        self.show_countdown(300)  # Start a 5 minute countdown
+                        self.login_attempts = 0  # Reset attempts after triggering countdown
+                    else:
+                        messagebox.showerror("Echec de connexion", "Mot de passe incorrect. Merci de réessayer.")
+                        self.username_var.set('')
+                        self.password_var.set('')
             
     def show_create_account_screen(self):
         
@@ -217,23 +225,13 @@ class PasswordManagerApp:
         self.confirm_password_var = tk.StringVar()
         tk.Entry(self.root, textvariable=self.confirm_password_var, show='*').grid(row=2, column=1)
 
-        tk.Label(self.root, text="Secret Question:").grid(row=3, column=0)
-        self.secret_question_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.secret_question_var).grid(row=3, column=1)
-
-        tk.Label(self.root, text="Secret Answer:").grid(row=4, column=0)
-        self.secret_answer_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.secret_answer_var).grid(row=4, column=1)
-
         tk.Button(self.root, text="Create Account", command=self.create_account).grid(row=5, column=0, columnspan=2)
 
     def create_account(self):
         username = self.new_username_var.get()
         password = self.new_password_var.get()
         confirm_password = self.confirm_password_var.get()
-        secret_question = self.secret_question_var.get()
-        secret_answer = self.secret_answer_var.get()
-
+      
         if password != confirm_password:
             messagebox.showerror("Error", "Passwords do not match")
             return
@@ -249,8 +247,8 @@ class PasswordManagerApp:
         try:
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO users (username, hashed_password, salt, secret_question, secret_answer) VALUES (?, ?, ?, ?, ?)",
-                            (username, hashed_password.decode('utf-8'), salt, secret_question, secret_answer))  # Store the hashed password as a string
+                cursor.execute("INSERT INTO users (username, hashed_password, salt) VALUES (?, ?, ?)",
+                            (username, hashed_password.decode('utf-8'), salt))  # Store the hashed password as a string
                 messagebox.showinfo("Success", "Account created successfully")
                 self.show_login_screen()
         except sqlite3.IntegrityError:
