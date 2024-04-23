@@ -6,10 +6,12 @@ from tkinter import messagebox, simpledialog, ttk, Label
 import re
 import tkinter as tk
 import bcrypt
+import cryptography.fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
+import cryptography
 
 
 # Constantes
@@ -56,17 +58,26 @@ def create_database():
         cursor = conn.cursor()
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users
-            (username TEXT PRIMARY KEY, hashed_password TEXT, salt TEXT)
+            ( ID INTEGER PRIMARY KEY AUTOINCREMENT, 
+            username TEXT UNIQUE, 
+            hashed_password TEXT, 
+            salt TEXT)
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS passwords
-            (username TEXT, site_name TEXT, username_site TEXT, password TEXT, salt TEXT)
+            (ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT, 
+            site_name TEXT, 
+            username_site TEXT, 
+            password TEXT, 
+            salt TEXT, 
+            FOREIGN KEY(username) REFERENCES users(username))
         ''')
 
 class PasswordManagerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("SecurePass")
+        self.root.title("SecurePass Manager")
         self.root.geometry('900x500+50+50')
         self.countdown_window = None
         self.current_username = None
@@ -76,8 +87,6 @@ class PasswordManagerApp:
         self.waiting = False
         
         create_database()
-        
-        
         
         self.root.columnconfigure(0, weight=1)  # This makes column 0 (the only column) expandable
         self.head_title = Label(self.root, text="SecurePass Manager", font=("Arial",20), width="100",bg="blue", fg="white", padx="20", pady="20", justify="center")
@@ -254,91 +263,130 @@ class PasswordManagerApp:
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Username already exists")
             
+    #def show_main_menu(self):
+        #self.clear_screen()
+        #tk.Button(self.root, text="Add Password", command=self.add_password_ui).grid(row=0, column=0)
+        #tk.Button(self.root, text="View Passwords", command=self.view_passwords).grid(row=1, column=0)
+        #tk.Button(self.root, text="Delete Password", command=self.delete_password_ui).grid(row=2, column=0)
+        #tk.Button(self.root, text="Logout", command=self.logout).grid(row=3, column=0)
+        
     def show_main_menu(self):
         self.clear_screen()
-        tk.Button(self.root, text="Add Password", command=self.add_password_ui).grid(row=0, column=0)
-        tk.Button(self.root, text="View Passwords", command=self.view_passwords).grid(row=1, column=0)
-        tk.Button(self.root, text="Delete Password", command=self.delete_password_ui).grid(row=2, column=0)
-        tk.Button(self.root, text="Logout", command=self.logout).grid(row=3, column=0)
+        top_frame = tk.Frame(self.root)
+        top_frame.grid(row=0, column=0, sticky="nsew", pady=10)
+        # Champs pour l'ajout de nouvelles entrées
+        tk.Label(top_frame, text="site_name").pack(side="left", padx=(0, 10))
+        self.website_entry = tk.Entry(top_frame)
+        self.website_entry.pack(side="left")
 
-    def add_password_ui(self):
-        self.clear_screen()
-        tk.Label(self.root, text="ID Securepass:").grid(row=0, column=0)
-        self.username_entry = tk.Entry(self.root)
-        self.username_entry.grid(row=0, column=1)
-        tk.Label(self.root, text="Nom du site:").grid(row=1, column=0)
-        self.site_name_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.site_name_var).grid(row=1, column=1)
-        tk.Label(self.root, text="Username du site:").grid(row=2, column=0)
-        self.site_username_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.site_username_var).grid(row=2, column=1)
-        tk.Label(self.root, text="Mot de passe:").grid(row=3, column=0)
-        self.site_password_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.site_password_var).grid(row=3, column=1)
-        tk.Button(self.root, text="Add", command=self.add_password).grid(row=4, column=0, columnspan=2)
-        tk.Button(self.root, text="Return", command=self.show_main_menu).grid(row=5, column=0, columnspan=2)
+        tk.Label(top_frame, text="Username").pack(side="left", padx=(0, 10))
+        self.username_entry = tk.Entry(top_frame)
+        self.username_entry.pack(side="left")
+
+        tk.Label(top_frame, text="Password").pack(side="left", padx=(0, 10))
+        self.password_entry = tk.Entry(top_frame)
+        self.password_entry.pack(side="left")
+        
+        # Champs pour la recherche
+        tk.Label(top_frame, text="Search").pack(side="left", padx=(0, 10))
+        self.search_entry = tk.Entry(top_frame)
+        self.search_entry.pack(side="left")
+
+        # Boutons pour les actions
+        save_button = tk.Button(top_frame, text="Save")
+        save_button.pack(side="left", padx=(10, 0))
+
+        update_button = tk.Button(top_frame, text="Update")
+        update_button.pack(side="left", padx=(10, 0))
+
+        delete_button = tk.Button(top_frame, text="Delete")
+        delete_button.pack(side="left", padx=(10, 0))
+
+        search_button = tk.Button(top_frame, text="Search")
+        search_button.pack(side="left", padx=(10, 0))
+
+        # Zone d'affichage des enregistrements
+        records_frame = tk.Frame(self.root)
+        records_frame.grid(sticky="nsew")
+        self.records_tree = ttk.Treeview(records_frame, columns=("ID", "site_name", "Username", "Password"), show="headings")
+        self.records_tree.heading("ID", text="ID")
+        self.records_tree.heading("site_name", text="Site Name")
+        self.records_tree.heading("Username", text="Username")
+        self.records_tree.heading("Password", text="Password")
+        self.records_tree.pack(fill="both", expand=True)
+
+        # Fonctions de gestion des événements pour les boutons
+        save_button.config(command=lambda: self.save_record(self.website_entry.get(), self.username_entry.get(), self.password_entry.get()))
+        update_button.config(command=lambda: self.update_record())
+        delete_button.config(command=lambda: self.delete_record())
+        search_button.config(command=lambda: self.search_record())
+
+        # Charge les enregistrements existants
+        self.load_records()
+        
+    def load_records(self):
+        self.records_tree.delete(*self.records_tree.get_children())  # Effacer les enregistrements existants
+        with sqlite3.connect(DB_NAME) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM passwords")
+            records = cursor.fetchall()
+            for record in records:
+                self.records_tree.insert("", "end", values=record)
     
-    def add_password(self):
-        username = self.username_entry.get()
-        site_name = self.site_name_var.get()
-        username_site = self.site_username_var.get()
-        password = self.site_password_var.get()
-        salt = generate_salt()
-        key = derive_key(password, salt)
-        encrypted_password = encrypt_data(password, key)
-
-        try:
+    def save_record(self, website, username, password):
+        if website and username and password:  # Simple vérification pour s'assurer que les champs ne sont pas vides
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO passwords (username, site_name, username_site, password, salt) VALUES (?, ?, ?, ?, ?)",
-                            (username, site_name, username_site, encrypted_password, salt))
-                messagebox.showinfo("Success", "Password added successfully")
-                self.username_entry.delete(0, 'end')
-                self.site_name_var.set('')
-                self.site_username_var.set('')
-                self.site_password_var.set('')
-        except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "Failed to add password")
-            self.show_main_menu()
+                cursor.execute("INSERT INTO passwords (site_name, username, password) VALUES (?, ?, ?)",
+                            (website, username, password))
+                conn.commit()  # Ne pas oublier de commettre les changements
+            self.load_records()  # Recharger les enregistrements pour afficher le nouveau
+        else:
+            messagebox.showwarning("Warning", "All fields are required.")
+            
+    def update_record(self):
+        selected_items = self.records_tree.selection() # On suppose que tu as un item sélectionné
+        if selected_items:
+            selected_item = selected_items[0]
+            # Obtenir les détails à partir des entrées ou d'une boîte de dialogue
+            website = self.website_entry.get()  # Code pour obtenir le nouveau website
+            username = self.username_entry.get()  # Code pour obtenir le nouveau username
+            password = self.password_entry.get()  # Code pour obtenir le nouveau password
+            with sqlite3.connect(DB_NAME) as conn:
+                cursor = conn.cursor()
+                cursor.execute("UPDATE passwords SET site_name=?, username=?, password=? WHERE ID=?",
+                            (website, username, password, self.records_tree.item(selected_item, "values")[0]))
+                conn.commit()
+            self.load_records()  # Recharger les enregistrements pour afficher les mises à jour
+        else:
+            print("No item selected") # Afficher un message d'erreur si aucun élément n'est sélectionné
+    
+    def delete_record(self):
+        selected_item = self.records_tree.selection()[0]
+        if selected_item:
+            with sqlite3.connect(DB_NAME) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM passwords WHERE ID=?", (self.records_tree.item(selected_item, "values")[0],))
+                conn.commit()
+            self.records_tree.delete(selected_item)  # Supprimer l'entrée de l'interface graphique
 
-    def view_passwords(self):
-        self.clear_screen()
+    def search_record(self):
+        search_term = self.search_entry.get()  # Code pour obtenir le terme de recherche de l'utilisateur
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT site_name, username_site, password FROM passwords WHERE username=?", (self.current_username,))
-            rows = cursor.fetchall()
-            if rows:
-                for i, (site_name, username_site, password) in enumerate(rows, start=1):
-                    fernet = Fernet(self.encryption_key)
-                    decrypted_password = fernet.decrypt(password.encode()).decode()
-                    tk.Label(self.root, text=f"{site_name} - {username_site} - {decrypted_password}").grid(row=i, column=0)
-            else:
-                tk.Label(self.root, text="No passwords saved").grid(row=0, column=0)
-        tk.Button(self.root, text="Back", command=self.show_main_menu).grid(row=len(rows) + 1, column=0)
-
-    def delete_password_ui(self):
-        self.clear_screen()
-        tk.Label(self.root, text="Site Name:").grid(row=0, column=0)
-        self.delete_site_name_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.delete_site_name_var).grid(row=0, column=1)
-        tk.Button(self.root, text="Delete", command=self.delete_password).grid(row=1, column=0, columnspan=2)
-
-    def delete_password(self):
-        site_name = self.delete_site_name_var.get()
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM passwords WHERE username=? AND site_name=?", (self.current_username, site_name))
-            if cursor.rowcount > 0:
-                messagebox.showinfo("Success", "Password deleted successfully")
-            else:
-                messagebox.showerror("Error", "No such site found")
-            self.show_main_menu()
-
+            cursor.execute("SELECT * FROM passwords WHERE website LIKE ?", ('%{}%'.format(search_term),))
+            records = cursor.fetchall()
+            # Mettre à jour l'affichage ici, peut-être en nettoyant d'abord le Treeview et en ajoutant les enregistrements filtrés
+            for i in self.records_tree.get_children():
+                self.records_tree.delete(i)
+            for record in records:
+                self.records_tree.insert('', 'end', values=record)
     def logout(self):
         self.current_username = None
         self.encryption_key = None
         self.show_login_screen()
 
+    
 def main():
     root = tk.Tk()
     app = PasswordManagerApp(root)
