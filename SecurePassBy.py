@@ -64,14 +64,12 @@ def create_database():
             salt TEXT)
         ''')
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS passwords
-            (ID INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT, 
-            site_name TEXT, 
-            username_site TEXT, 
-            password TEXT, 
-            salt TEXT, 
-            FOREIGN KEY(username) REFERENCES users(username))
+            CREATE TABLE IF NOT EXISTS passwords (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_name TEXT,
+            username_site TEXT,
+            password TEXT,
+            salt TEXT)
         ''')
 
 class PasswordManagerApp:
@@ -181,6 +179,8 @@ class PasswordManagerApp:
             self.remaining -= 1
             self.root.after(1000, self.show_countdown)
             
+            
+            
     def force_close_application(self):
         """ Force la fermeture de l'application """
         self.root.destroy()
@@ -220,21 +220,39 @@ class PasswordManagerApp:
                         self.password_var.set('')
             
     def show_create_account_screen(self):
-        
         self.clear_screen()
-        tk.Label(self.root, text="Username:").grid(row=0, column=0)
+
+        # Utiliser un cadre central pour aligner les widgets au centre
+        create_account_frame = tk.Frame(self.root)
+        create_account_frame.place(relx=0.5, rely=0.5, anchor='center')
+
+        # Champ Username
+        tk.Label(create_account_frame, text="Username:", font=("Helvetica", 14)).grid(row=1, column=0, sticky='e', padx=10, pady=10)
         self.new_username_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.new_username_var).grid(row=0, column=1)
+        username_entry = tk.Entry(create_account_frame, textvariable=self.new_username_var, font=("Helvetica", 14), bd=2, relief='solid')
+        username_entry.grid(row=1, column=1, padx=10, pady=10)
 
-        tk.Label(self.root, text="Password:").grid(row=1, column=0)
+        # Champ Password
+        tk.Label(create_account_frame, text="Password:", font=("Helvetica", 14)).grid(row=2, column=0, sticky='e', padx=10, pady=10)
         self.new_password_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.new_password_var, show='*').grid(row=1, column=1)
+        password_entry = tk.Entry(create_account_frame, textvariable=self.new_password_var, show='*', font=("Helvetica", 14), bd=2, relief='solid')
+        password_entry.grid(row=2, column=1, padx=10, pady=10)
 
-        tk.Label(self.root, text="Confirm Password:").grid(row=2, column=0)
+        # Champ Confirm Password
+        tk.Label(create_account_frame, text="Confirm Password:", font=("Helvetica", 14)).grid(row=3, column=0, sticky='e', padx=10, pady=10)
         self.confirm_password_var = tk.StringVar()
-        tk.Entry(self.root, textvariable=self.confirm_password_var, show='*').grid(row=2, column=1)
+        confirm_password_entry = tk.Entry(create_account_frame, textvariable=self.confirm_password_var, show='*', font=("Helvetica", 14), bd=2, relief='solid')
+        confirm_password_entry.grid(row=3, column=1, padx=10, pady=10)
 
-        tk.Button(self.root, text="Create Account", command=self.create_account).grid(row=5, column=0, columnspan=2)
+        # Boutons
+        create_btn = tk.Button(create_account_frame, text="Create Account", font=("Helvetica", 14), command=self.create_account)
+        create_btn.grid(row=4, column=1, padx=10, pady=(20, 10), sticky='e')
+
+        cancel_btn = tk.Button(create_account_frame, text="Cancel", font=("Helvetica", 14), command=self.show_login_screen)
+        cancel_btn.grid(row=4, column=0, padx=10, pady=(20, 10), sticky='e')
+
+        # Mettre le focus sur le champ Username à l'ouverture
+        username_entry.focus_set()
 
     def create_account(self):
         username = self.new_username_var.get()
@@ -260,127 +278,154 @@ class PasswordManagerApp:
                             (username, hashed_password.decode('utf-8'), salt))  # Store the hashed password as a string
                 messagebox.showinfo("Success", "Account created successfully")
                 self.show_login_screen()
+
         except sqlite3.IntegrityError:
             messagebox.showerror("Error", "Username already exists")
             
-    #def show_main_menu(self):
-        #self.clear_screen()
-        #tk.Button(self.root, text="Add Password", command=self.add_password_ui).grid(row=0, column=0)
-        #tk.Button(self.root, text="View Passwords", command=self.view_passwords).grid(row=1, column=0)
-        #tk.Button(self.root, text="Delete Password", command=self.delete_password_ui).grid(row=2, column=0)
-        #tk.Button(self.root, text="Logout", command=self.logout).grid(row=3, column=0)
-        
+    
     def show_main_menu(self):
         self.clear_screen()
         top_frame = tk.Frame(self.root)
         top_frame.grid(row=0, column=0, sticky="nsew", pady=10)
-        # Champs pour l'ajout de nouvelles entrées
-        tk.Label(top_frame, text="site_name").pack(side="left", padx=(0, 10))
-        self.website_entry = tk.Entry(top_frame)
-        self.website_entry.pack(side="left")
+
+        tk.Label(top_frame, text="Site Name").pack(side="left", padx=(0, 10))
+        self.site_entry = tk.Entry(top_frame)
+        self.site_entry.pack(side="left")
 
         tk.Label(top_frame, text="Username").pack(side="left", padx=(0, 10))
         self.username_entry = tk.Entry(top_frame)
         self.username_entry.pack(side="left")
 
         tk.Label(top_frame, text="Password").pack(side="left", padx=(0, 10))
-        self.password_entry = tk.Entry(top_frame)
+        self.password_entry = tk.Entry(top_frame, show='*')
         self.password_entry.pack(side="left")
-        
-        # Champs pour la recherche
+
         tk.Label(top_frame, text="Search").pack(side="left", padx=(0, 10))
         self.search_entry = tk.Entry(top_frame)
         self.search_entry.pack(side="left")
+        self.search_entry.bind('<KeyRelease>', self.dynamic_search)  # Ajout de l'écouteur d'événement
 
-        # Boutons pour les actions
-        save_button = tk.Button(top_frame, text="Save")
+        save_button = tk.Button(top_frame, text="Save", command=lambda: self.save_record(self.site_entry.get(), self.username_entry.get(), self.password_entry.get()))
         save_button.pack(side="left", padx=(10, 0))
 
-        update_button = tk.Button(top_frame, text="Update")
+        update_button = tk.Button(top_frame, text="Update", command=self.update_record)
         update_button.pack(side="left", padx=(10, 0))
 
-        delete_button = tk.Button(top_frame, text="Delete")
+        delete_button = tk.Button(top_frame, text="Delete", command=self.delete_record)
         delete_button.pack(side="left", padx=(10, 0))
 
-        search_button = tk.Button(top_frame, text="Search")
-        search_button.pack(side="left", padx=(10, 0))
-
-        # Zone d'affichage des enregistrements
         records_frame = tk.Frame(self.root)
         records_frame.grid(sticky="nsew")
-        self.records_tree = ttk.Treeview(records_frame, columns=("ID", "site_name", "Username", "Password"), show="headings")
-        self.records_tree.heading("ID", text="ID")
-        self.records_tree.heading("site_name", text="Site Name")
+        # Configure Treeview without the ID column visible
+        self.records_tree = ttk.Treeview(records_frame, columns=("Site Name", "Username", "Password"), show="headings")
+        self.records_tree.heading("Site Name", text="Site Name")
         self.records_tree.heading("Username", text="Username")
         self.records_tree.heading("Password", text="Password")
         self.records_tree.pack(fill="both", expand=True)
 
-        # Fonctions de gestion des événements pour les boutons
-        save_button.config(command=lambda: self.save_record(self.website_entry.get(), self.username_entry.get(), self.password_entry.get()))
-        update_button.config(command=lambda: self.update_record())
-        delete_button.config(command=lambda: self.delete_record())
-        search_button.config(command=lambda: self.search_record())
+        self.records_tree.bind('<<TreeviewSelect>>', self.on_record_select)  # Bind the selection event
 
-        # Charge les enregistrements existants
         self.load_records()
+
+
         
     def load_records(self):
-        self.records_tree.delete(*self.records_tree.get_children())  # Effacer les enregistrements existants
+        self.records_tree.delete(*self.records_tree.get_children())  # Clear previous entries
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM passwords")
+            cursor.execute("SELECT ID, site_name, username_site, password FROM passwords ORDER BY ID")
             records = cursor.fetchall()
             for record in records:
-                self.records_tree.insert("", "end", values=record)
-    
+                # Insert data without displaying the ID
+                self.records_tree.insert("", "end", iid=record[0], values=(record[1], record[2], record[3]))
+
     def save_record(self, website, username, password):
-        if website and username and password:  # Simple vérification pour s'assurer que les champs ne sont pas vides
+        if website and username and password:  # Vérification que les champs ne sont pas vides
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO passwords (site_name, username, password) VALUES (?, ?, ?)",
+                # S'assurer que l'ordre des valeurs correspond à l'ordre des colonnes dans la base de données
+                cursor.execute("INSERT INTO passwords (site_name, username_site, password) VALUES (?, ?, ?)",
                             (website, username, password))
-                conn.commit()  # Ne pas oublier de commettre les changements
+                conn.commit()  # Appliquer les changements dans la base de données
             self.load_records()  # Recharger les enregistrements pour afficher le nouveau
         else:
             messagebox.showwarning("Warning", "All fields are required.")
+
+        # Effacer les champs après enregistrement
+        self.site_entry.delete(0, tk.END)
+        self.username_entry.delete(0, tk.END)
+        self.password_entry.delete(0, tk.END)
+        
+    def on_record_select(self, event):
+        selected = self.records_tree.selection()
+        if selected:
+            record = self.records_tree.item(selected[0], 'values')
+            # Effacer le contenu actuel dans les champs
+            self.site_entry.delete(0, tk.END)
+            self.site_entry.insert(0, record[0])  # Ajuster l'indice puisque la colonne ID est enlevée
+            self.username_entry.delete(0, tk.END)
+            self.username_entry.insert(0, record[1])
+            self.password_entry.delete(0, tk.END)
+            self.password_entry.insert(0, record[2])
             
     def update_record(self):
-        selected_items = self.records_tree.selection() # On suppose que tu as un item sélectionné
+        selected_items = self.records_tree.selection()
         if selected_items:
             selected_item = selected_items[0]
-            # Obtenir les détails à partir des entrées ou d'une boîte de dialogue
-            website = self.website_entry.get()  # Code pour obtenir le nouveau website
-            username = self.username_entry.get()  # Code pour obtenir le nouveau username
-            password = self.password_entry.get()  # Code pour obtenir le nouveau password
+            real_id = self.records_tree.item(selected_item)['values'][0]  # Prendre le vrai ID depuis les valeurs
+            site = self.site_entry.get()
+            username = self.username_entry.get()
+            password = self.password_entry.get()
+
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("UPDATE passwords SET site_name=?, username=?, password=? WHERE ID=?",
-                            (website, username, password, self.records_tree.item(selected_item, "values")[0]))
+                cursor.execute("UPDATE passwords SET site_name=?, username_site=?, password=? WHERE ID=?",
+                            (site, username, password, real_id))
                 conn.commit()
-            self.load_records()  # Recharger les enregistrements pour afficher les mises à jour
+
+            self.load_records()  # Recharger les enregistrements pour mettre à jour l'affichage
         else:
-            print("No item selected") # Afficher un message d'erreur si aucun élément n'est sélectionné
-    
+            messagebox.showerror("Error", "Aucun élément sélectionné pour la mise à jour")
+
+        # Effacer les champs après enregistrement
+        self.site_entry.delete(0, tk.END)
+        self.username_entry.delete(0, tk.END)
+        self.password_entry.delete(0, tk.END)
+
     def delete_record(self):
-        selected_item = self.records_tree.selection()[0]
-        if selected_item:
+        selected_items = self.records_tree.selection()
+        if selected_items:
+            selected_item = selected_items[0]
+            real_id = self.records_tree.item(selected_item, "iid")  # Utiliser l'ID interne pour la suppression
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM passwords WHERE ID=?", (self.records_tree.item(selected_item, "values")[0],))
+                cursor.execute("DELETE FROM passwords WHERE ID=?", (real_id,))
                 conn.commit()
             self.records_tree.delete(selected_item)  # Supprimer l'entrée de l'interface graphique
+            self.load_records()  # Recharger l'affichage
+        else:
+            messagebox.showwarning("Warning", "Aucun élément sélectionné pour la suppression")
 
-    def search_record(self):
-        search_term = self.search_entry.get()  # Code pour obtenir le terme de recherche de l'utilisateur
-        with sqlite3.connect(DB_NAME) as conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM passwords WHERE website LIKE ?", ('%{}%'.format(search_term),))
-            records = cursor.fetchall()
-            # Mettre à jour l'affichage ici, peut-être en nettoyant d'abord le Treeview et en ajoutant les enregistrements filtrés
-            for i in self.records_tree.get_children():
-                self.records_tree.delete(i)
-            for record in records:
-                self.records_tree.insert('', 'end', values=record)
+            # Effacer les champs après enregistrement
+        self.site_entry.delete(0, tk.END)
+        self.username_entry.delete(0, tk.END)
+        self.password_entry.delete(0, tk.END)
+
+
+    def dynamic_search(self, event):
+        search_term = self.search_entry.get().strip()
+        if search_term:
+            self.records_tree.delete(*self.records_tree.get_children())
+            with sqlite3.connect(DB_NAME) as conn:
+                cursor = conn.cursor()
+                query = "SELECT * FROM passwords WHERE site_name LIKE ? OR username LIKE ?"
+                cursor.execute(query, ('%{}%'.format(search_term), '%{}%'.format(search_term)))
+                records = cursor.fetchall()
+                for record in records:
+                    self.records_tree.insert('', 'end', values=record)
+        else:
+            self.load_records()  # Recharger tous les enregistrements si le champ de recherche est vide
+
     def logout(self):
         self.current_username = None
         self.encryption_key = None
