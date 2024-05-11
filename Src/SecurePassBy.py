@@ -318,15 +318,18 @@ class PasswordManagerApp:
         records_frame.grid(sticky="nsew")
         # Configure Treeview without the ID column visible
         self.records_tree = ttk.Treeview(records_frame, columns=("Site Name", "Username", "Password"), show="headings")
-        self.records_tree.heading("Site Name", text="Site Name")
-        self.records_tree.heading("Username", text="Username")
-        self.records_tree.heading("Password", text="Password")
+        self.records_tree.heading("Site Name", text="Site Name", anchor="center")
+        self.records_tree.heading("Username", text="Username", anchor="center")
+        self.records_tree.heading("Password", text="Password", anchor="center")
         self.records_tree.pack(fill="both", expand=True)
 
         self.records_tree.bind('<<TreeviewSelect>>', self.on_record_select)  # Bind the selection event
 
         self.load_records()
-
+        
+        # Ajout d'un bouton de déconnexion
+        logout_button = tk.Button(top_frame, text="Logout", command=self.logout)
+        logout_button.pack(side="right", padx=10, pady=10)
 
         
     def load_records(self):
@@ -336,8 +339,9 @@ class PasswordManagerApp:
             cursor.execute("SELECT ID, site_name, username_site, password FROM passwords ORDER BY ID")
             records = cursor.fetchall()
             for record in records:
-                # Insert data without displaying the ID
-                self.records_tree.insert("", "end", iid=record[0], values=(record[1], record[2], record[3]))
+                record_id, site_name, username, password = record
+                # Insert data with ID as 'iid'
+                self.records_tree.insert("", "end", iid=record_id, values=(site_name, username, password))
 
     def save_record(self, website, username, password):
         if website and username and password:  # Vérification que les champs ne sont pas vides
@@ -372,7 +376,8 @@ class PasswordManagerApp:
         selected_items = self.records_tree.selection()
         if selected_items:
             selected_item = selected_items[0]
-            real_id = self.records_tree.item(selected_item)['values'][0]  # Prendre le vrai ID depuis les valeurs
+            # L'iid est l'identifiant de l'élément dans le Treeview
+            real_id = selected_item  # l'iid est directement l'ID de la base de données
             site = self.site_entry.get()
             username = self.username_entry.get()
             password = self.password_entry.get()
@@ -383,11 +388,9 @@ class PasswordManagerApp:
                             (site, username, password, real_id))
                 conn.commit()
 
-            self.load_records()  # Recharger les enregistrements pour mettre à jour l'affichage
-        else:
-            messagebox.showerror("Error", "Aucun élément sélectionné pour la mise à jour")
-
-        # Effacer les champs après enregistrement
+            self.load_records()
+            
+                # Effacer les champs après enregistrement
         self.site_entry.delete(0, tk.END)
         self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
@@ -396,17 +399,15 @@ class PasswordManagerApp:
         selected_items = self.records_tree.selection()
         if selected_items:
             selected_item = selected_items[0]
-            real_id = self.records_tree.item(selected_item, "iid")  # Utiliser l'ID interne pour la suppression
+            real_id = selected_item  # l'iid est directement l'ID de la base de données
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM passwords WHERE ID=?", (real_id,))
                 conn.commit()
-            self.records_tree.delete(selected_item)  # Supprimer l'entrée de l'interface graphique
-            self.load_records()  # Recharger l'affichage
-        else:
-            messagebox.showwarning("Warning", "Aucun élément sélectionné pour la suppression")
+            self.records_tree.delete(selected_item)
+            self.load_records()
 
-            # Effacer les champs après enregistrement
+                # Effacer les champs après enregistrement
         self.site_entry.delete(0, tk.END)
         self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
@@ -414,22 +415,34 @@ class PasswordManagerApp:
 
     def dynamic_search(self, event):
         search_term = self.search_entry.get().strip()
+        self.records_tree.delete(*self.records_tree.get_children())  # Clear previous search results
         if search_term:
-            self.records_tree.delete(*self.records_tree.get_children())
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                query = "SELECT * FROM passwords WHERE site_name LIKE ? OR username LIKE ?"
+                query = "SELECT ID, site_name, username_site, password FROM passwords WHERE site_name LIKE ? OR username_site LIKE ?"
                 cursor.execute(query, ('%{}%'.format(search_term), '%{}%'.format(search_term)))
                 records = cursor.fetchall()
                 for record in records:
-                    self.records_tree.insert('', 'end', values=record)
+                    record_id, site_name, username, password = record
+                    self.records_tree.insert("", "end", iid=record_id, values=(site_name, username, password))
         else:
-            self.load_records()  # Recharger tous les enregistrements si le champ de recherche est vide
+            self.load_records()  # Reload all records if the search field is empty
 
     def logout(self):
+        # Réinitialisation des informations de session de l'utilisateur
         self.current_username = None
         self.encryption_key = None
+
+        # Effacement des champs de saisie
+        if hasattr(self, 'username_var') and hasattr(self, 'password_var'):
+            self.username_var.set('')
+            self.password_var.set('')
+
+        # Affichage de l'écran de connexion
         self.show_login_screen()
+
+        # Message de confirmation de la déconnexion en français
+        messagebox.showinfo("Déconnexion réussie", "Vous avez été déconnecté avec succès.")
 
     
 def main():
