@@ -57,24 +57,29 @@ def create_database():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users
-            ( ID INTEGER PRIMARY KEY AUTOINCREMENT, 
-            username TEXT UNIQUE, 
-            hashed_password TEXT, 
+            CREATE TABLE IF NOT EXISTS users (
+            ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE,
+            hashed_password TEXT,
             salt TEXT)
         ''')
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS passwords (
             ID INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
             site_name TEXT,
             username_site TEXT,
             password TEXT,
-            salt TEXT)
+            salt TEXT,
+            FOREIGN KEY(user_id) REFERENCES users(ID))
         ''')
 
 class PasswordManagerApp:
+    conn = None
     def __init__(self, root):
         self.root = root
+        if PasswordManagerApp.conn is None:
+            PasswordManagerApp.conn = sqlite3.connect(DB_NAME)
         self.root.title("SecurePass Manager")
         self.root.geometry('900x500+50+50')
         self.countdown_window = None
@@ -187,24 +192,21 @@ class PasswordManagerApp:
 
 
     def login(self):
+    
         username = self.username_var.get()
-        password = self.password_var.get().encode('utf-8')  # Convertir le mot de passe en bytes
+        password = self.password_var.get().encode('utf-8')
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT hashed_password FROM users WHERE username=?", (username,))
+            cursor.execute("SELECT ID, hashed_password FROM users WHERE username=?", (username,))
             user = cursor.fetchone()
-            if not self.user_exists(username):
-                messagebox.showerror("Erreur", "Utilisateur introuvable, veuillez réessayer")
-                self.username_var.set('')
-                self.password_var.set('')
-                return
             if user:
-                hashed_password = user[0].encode('utf-8')  # Convertir le hash du mot de passe en bytes
-                if bcrypt.checkpw(password, hashed_password):  # Utiliser bcrypt.checkpw pour vérifier le mot de passe
-                # Le reste de votre logique de connexion
+                user_id, hashed_password = user
+                if bcrypt.checkpw(password, hashed_password.encode('utf-8')):
                     self.current_username = username
+                    self.current_user_id = user_id  # Stocker l'ID de l'utilisateur
                     self.encryption_key = Fernet.generate_key()
                     self.show_main_menu()
+            
                 else:
                     if self.waiting:
                         return  # Do not process login attempts while waiting
@@ -215,7 +217,7 @@ class PasswordManagerApp:
                         self.show_countdown(300)  # Start a 5 minute countdown
                         self.login_attempts = 0  # Reset attempts after triggering countdown
                     else:
-                        messagebox.showerror("Echec de connexion", "Mot de passe incorrect. Merci de réessayer.")
+                        messagebox.showerror("Echec de connexion", "Mot de passe ou non d'utilisateur incorrect. Merci de réessayer.")
                         self.username_var.set('')
                         self.password_var.set('')
             
@@ -260,11 +262,12 @@ class PasswordManagerApp:
         confirm_password = self.confirm_password_var.get()
       
         if password != confirm_password:
-            messagebox.showerror("Error", "Passwords do not match")
+            messagebox.showerror("Error", "Mots de passe non identiques!")
             return
 
+
         if not re.match(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{14,}$', password):
-            messagebox.showerror("Error", "Password does not meet complexity requirements")
+            messagebox.showerror("Error", "Le mot de passe doit contenir au moins 14 caractères, une lettre majuscule, une lettre minuscule, un chiffre et un caractère spécial.")
             return
 
         salt = generate_salt()
@@ -276,11 +279,12 @@ class PasswordManagerApp:
                 cursor = conn.cursor()
                 cursor.execute("INSERT INTO users (username, hashed_password, salt) VALUES (?, ?, ?)",
                             (username, hashed_password.decode('utf-8'), salt))  # Store the hashed password as a string
-                messagebox.showinfo("Success", "Account created successfully")
-                self.show_login_screen()
+                messagebox.showinfo("Success", "Compte créé avec succès!")
 
         except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "Username already exists")
+            messagebox.showerror("Error", "L'tilisateur existe déjà")
+            
+        self.show_login_screen()
             
     
     def show_main_menu(self):
@@ -336,7 +340,7 @@ class PasswordManagerApp:
         self.records_tree.delete(*self.records_tree.get_children())  # Clear previous entries
         with sqlite3.connect(DB_NAME) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT ID, site_name, username_site, password FROM passwords ORDER BY ID")
+            cursor.execute("SELECT ID, site_name, username_site, password FROM passwords WHERE user_id=? ORDER BY ID", (self.current_user_id,))
             records = cursor.fetchall()
             for record in records:
                 record_id, site_name, username, password = record
@@ -348,12 +352,12 @@ class PasswordManagerApp:
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
                 # S'assurer que l'ordre des valeurs correspond à l'ordre des colonnes dans la base de données
-                cursor.execute("INSERT INTO passwords (site_name, username_site, password) VALUES (?, ?, ?)",
-                            (website, username, password))
+                cursor.execute("INSERT INTO passwords (user_id, site_name, username_site, password) VALUES (?, ?, ?, ?)",
+                            (self.current_user_id, website, username, password))
                 conn.commit()  # Appliquer les changements dans la base de données
             self.load_records()  # Recharger les enregistrements pour afficher le nouveau
         else:
-            messagebox.showwarning("Warning", "All fields are required.")
+            messagebox.showwarning("Warning", "Tous les champs sont requis!")
 
         # Effacer les champs après enregistrement
         self.site_entry.delete(0, tk.END)
@@ -399,13 +403,13 @@ class PasswordManagerApp:
         selected_items = self.records_tree.selection()
         if selected_items:
             selected_item = selected_items[0]
-            real_id = selected_item  # l'iid est directement l'ID de la base de données
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM passwords WHERE ID=?", (real_id,))
+                # Ajouter une vérification pour s'assurer que l'enregistrement appartient à l'utilisateur connecté
+                cursor.execute("DELETE FROM passwords WHERE ID=? AND user_id=?", (selected_item, self.current_user_id))
                 conn.commit()
-            self.records_tree.delete(selected_item)
             self.load_records()
+
 
                 # Effacer les champs après enregistrement
         self.site_entry.delete(0, tk.END)
