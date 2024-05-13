@@ -1,57 +1,53 @@
 import unittest
-import sys
+import tkinter as tk
+#from your_password_manager_module import PasswordManagerApp, create_database
 import os
-from tkinter import Tk
-import sqlite3
-from unittest.mock import patch
+import sys
+sys.path.append(os.path.abspath('../Src'))  # Assurez-vous que le chemin est correct
 
-# Ajout du chemin du répertoire 'src' au sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Src')))
+from SecurePassBy import PasswordManagerApp, create_database,DB_NAME
 
-# Import de la classe PasswordManagerApp depuis le script source
-from SecurePassBy import PasswordManagerApp
 
-class TestIntegrationPasswordManagerApp(unittest.TestCase):
+
+class TestPasswordManagerApp(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Setup the database and the environment before all tests
+        cls.db_name = DB_NAME
+        if os.path.exists(cls.db_name):
+            os.remove(cls.db_name)
+        create_database()  # Ensure the database is set up
+
     def setUp(self):
-        # Initialiser l'application avec un contexte Tkinter
-        self.root = Tk()
+        # Setup the application before each test
+        self.root = tk.Tk()
         self.app = PasswordManagerApp(self.root)
 
-    @patch('sqlite3.connect')
-    def test_full_user_flow(self, mock_connect):
-        # Simuler une connexion à la base de données
-        mock_conn = mock_connect.return_value.__enter__.return_value
-        mock_cursor = mock_conn.cursor.return_value
-        mock_cursor.fetchone.side_effect = [None, ('hashed_password',)]  # Simule un utilisateur non trouvé puis trouvé
-
-        # Créer un compte
+    def test_create_account(self):
+        # Simulate account creation
         self.app.show_create_account_screen()
-        self.app.new_username_var.set('testuser')
-        self.app.new_password_var.set('Password@123')
-        self.app.confirm_password_var.set('Password@123')
+        self.app.new_username_var.set("testuser")
+        self.app.new_password_var.set("Testpassword1!")
+        self.app.confirm_password_var.set("Testpassword1!")
         self.app.create_account()
+        self.assertTrue(self.app.user_exists("testuser"))
 
-        # Se connecter
-        self.app.username_var.set('testuser')
-        self.app.password_var.set('Password@123')
+    def test_login_success(self):
+        # Simulate successful login
+        self.test_create_account()  # First create an account
+        self.app.show_login_screen()
+        self.app.username_var.set("testuser")
+        self.app.password_var.set("Testpassword1!")
         self.app.login()
+        self.assertEqual(self.app.current_username, "testuser")
 
-        # Ajouter un enregistrement
-        self.app.site_entry.insert(0, 'TestSite')
-        self.app.username_entry.insert(0, 'testuser')
-        self.app.password_entry.insert(0, 'Password@123')
-        self.app.save_record('TestSite', 'testuser', 'Password@123')
+    def test_login_failure(self):
+        # Simulate login failure
+        self.app.show_login_screen()
+        self.app.username_var.set("testuser")
+        self.app.password_var.set("wrongpassword")
+        self.app.login()
+        self.assertIsNone(self.app.current_username)
 
-        # Valider que les actions ont été effectuées correctement
-        calls = [
-            unittest.mock.call.execute('INSERT INTO users (username, hashed_password, salt) VALUES (?, ?, ?)', unittest.mock.ANY),
-            unittest.mock.call.execute('SELECT hashed_password FROM users WHERE username=?', ('testuser',)),
-            unittest.mock.call.execute('INSERT INTO passwords (site_name, username_site, password) VALUES (?, ?, ?)', ('TestSite', 'testuser', 'Password@123'))
-        ]
-        mock_cursor.assert_has_calls(calls, any_order=True)
-
-    def tearDown(self):
-        self.app.root.destroy()
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

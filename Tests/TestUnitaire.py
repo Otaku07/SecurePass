@@ -1,44 +1,69 @@
 import unittest
-import sys
+import sqlite3
 import os
-import tkinter as tk
-from unittest.mock import patch
+import sys
+sys.path.append(os.path.abspath('../Src'))
+from SecurePassBy import DB_NAME,generate_salt, derive_key, encrypt_data, decrypt_data, create_database
 
-# Ajout du chemin du répertoire 'src' au sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Src')))
+class TestPasswordManagerFunctions(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Create a database for testing
+        cls.db_name = DB_NAME
+        if os.path.exists(cls.db_name):
+            os.remove(cls.db_name)
+        create_database()  # Ensure the database is set up
 
-# Import de la classe PasswordManagerApp depuis le script source
-from SecurePassBy import PasswordManagerApp
+    def test_generate_salt(self):
+        # Test salt generation
+        salt = generate_salt()
+        self.assertEqual(len(salt), 32)  # Assuming SALT_SIZE is 32
 
+    def test_derive_key(self):
+        # Test key derivation
+        password = "testpassword"
+        salt = generate_salt()
+        key = derive_key(password, salt)
+        self.assertEqual(len(key), 44)  # Key length should be consistent
 
-class TestPasswordManagerApp(unittest.TestCase):
-    def setUp(self):
-        self.root = tk.Tk()
-        self.app = PasswordManagerApp(self.root)
+    def test_encryption_decryption(self):
+        # Test encryption and decryption
+        data = "Secret Data"
+        password = "testpassword"
+        salt = generate_salt()
+        key = derive_key(password, salt)
+        encrypted_data = encrypt_data(data, key)
+        decrypted_data = decrypt_data(encrypted_data, key)
+        self.assertEqual(data, decrypted_data)
 
-    def test_login(self):
-        # Simuler un login réussi ou échoué
-        # Par exemple, simuler l'interaction avec la base de données et les saisies utilisateur
-        pass
+    def test_database_operations(self):
+        # Test database operations
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
 
-    def test_create_account(self):
-        # Test création de compte
-        # Implémenter des cas pour valider la création de compte avec des entrées valides et invalides
-        pass
+        # Testing user existence check
+        cursor.execute("INSERT INTO users (username, hashed_password, salt) VALUES (?, ?, ?)", ("testuser", "hashedpassword", "salt"))
+        conn.commit()
 
-    def test_logout(self):
-        # Test de la déconnexion
-        self.app.current_username = 'test_user'
-        self.app.logout()
-        self.assertIsNone(self.app.current_username)
+        cursor.execute("SELECT * FROM users WHERE username=?", ("testuser",))
+        user = cursor.fetchone()
+        self.assertIsNotNone(user)
 
-    def test_save_record(self):
-        # Test sauvegarde d'un enregistrement
-        # Vérifier l'ajout correct d'un enregistrement à la base de données
-        pass
+        # Testing password storage
+        cursor.execute("INSERT INTO passwords (site_name, username_site, password, salt) VALUES (?, ?, ?, ?)", ("testsite", "testuser", "testpassword", "salt"))
+        conn.commit()
 
-    def tearDown(self):
-        self.app.root.destroy()
+        cursor.execute("SELECT * FROM passwords WHERE username_site=?", ("testuser",))
+        password_record = cursor.fetchone()
+        self.assertIsNotNone(password_record)
+
+        conn.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        # Remove the test database
+        if os.path.exists(cls.db_name):
+            os.remove(cls.db_name)
 
 if __name__ == "__main__":
     unittest.main()
