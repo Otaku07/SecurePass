@@ -81,7 +81,7 @@ class PasswordManagerApp:
         if PasswordManagerApp.conn is None:
             PasswordManagerApp.conn = sqlite3.connect(DB_NAME)
         self.root.title("SecurePass Manager")
-        self.root.geometry('900x500+50+50')
+        self.root.geometry('900x540+100+100')
         self.countdown_window = None
         self.current_username = None
         self.encryption_key = None
@@ -289,52 +289,57 @@ class PasswordManagerApp:
     
     def show_main_menu(self):
         self.clear_screen()
-        top_frame = tk.Frame(self.root)
-        top_frame.grid(row=0, column=0, sticky="nsew", pady=10)
+        # Utilisation d'une grille pour une meilleure disposition
+        entry_frame = tk.Frame(self.root)
+        entry_frame.grid(row=1, padx=20, pady=20, sticky="ew")
 
-        tk.Label(top_frame, text="Site Name").pack(side="left", padx=(0, 10))
-        self.site_entry = tk.Entry(top_frame)
-        self.site_entry.pack(side="left")
+        # Configuration de la grille pour qu'elle s'étire de manière égale
+        entry_frame.columnconfigure(0, weight=1)
+        entry_frame.columnconfigure(1, weight=1)
+        entry_frame.columnconfigure(2, weight=1)
+        entry_frame.columnconfigure(3, weight=1)
+        entry_frame.columnconfigure(4, weight=1)  # Pour le bouton de recherche si nécessaire
 
-        tk.Label(top_frame, text="Username").pack(side="left", padx=(0, 10))
-        self.username_entry = tk.Entry(top_frame)
-        self.username_entry.pack(side="left")
+        # Labels et champs de saisie
+        tk.Label(entry_frame, text="Site Name").grid(row=0, column=0, sticky='ew')
+        self.site_entry = tk.Entry(entry_frame)
+        self.site_entry.grid(row=1, column=0, sticky='ew', padx=5)
 
-        tk.Label(top_frame, text="Password").pack(side="left", padx=(0, 10))
-        self.password_entry = tk.Entry(top_frame, show='*')
-        self.password_entry.pack(side="left")
+        tk.Label(entry_frame, text="Username").grid(row=0, column=1, sticky='ew')
+        self.username_entry = tk.Entry(entry_frame)
+        self.username_entry.grid(row=1, column=1, sticky='ew', padx=5)
 
-        tk.Label(top_frame, text="Search").pack(side="left", padx=(0, 10))
-        self.search_entry = tk.Entry(top_frame)
-        self.search_entry.pack(side="left")
-        self.search_entry.bind('<KeyRelease>', self.dynamic_search)  # Ajout de l'écouteur d'événement
+        tk.Label(entry_frame, text="Password").grid(row=0, column=2, sticky='ew')
+        self.password_entry = tk.Entry(entry_frame, show='*')
+        self.password_entry.grid(row=1, column=2, sticky='ew', padx=5)
 
-        save_button = tk.Button(top_frame, text="Save", command=lambda: self.save_record(self.site_entry.get(), self.username_entry.get(), self.password_entry.get()))
-        save_button.pack(side="left", padx=(10, 0))
+        tk.Label(entry_frame, text="Search").grid(row=0, column=3, sticky='ew')
+        self.search_entry = tk.Entry(entry_frame)
+        self.search_entry.grid(row=1, column=3, sticky='ew', padx=5)
+        self.search_entry.bind('<KeyRelease>', self.dynamic_search)
 
-        update_button = tk.Button(top_frame, text="Update", command=self.update_record)
-        update_button.pack(side="left", padx=(10, 0))
+        # Boutons de gestion des enregistrements
+        
+        tk.Button(entry_frame, text="Save", command=self.save_record).grid(row=2, column=0, padx=5, pady=10)
+        tk.Button(entry_frame, text="Update", command=self.update_record).grid(row=2, column=1, padx=5, pady=10)
+        tk.Button(entry_frame, text="Delete", command=self.delete_record).grid(row=2, column=2, padx=5, pady=10)
 
-        delete_button = tk.Button(top_frame, text="Delete", command=self.delete_record)
-        delete_button.pack(side="left", padx=(10, 0))
-
+        # Affichage des enregistrements
         records_frame = tk.Frame(self.root)
-        records_frame.grid(sticky="nsew")
-        # Configure Treeview without the ID column visible
+        records_frame.grid(row=3, padx=20, pady=20, sticky="nsew")
         self.records_tree = ttk.Treeview(records_frame, columns=("Site Name", "Username", "Password"), show="headings")
-        self.records_tree.heading("Site Name", text="Site Name", anchor="center")
-        self.records_tree.heading("Username", text="Username", anchor="center")
-        self.records_tree.heading("Password", text="Password", anchor="center")
-        self.records_tree.pack(fill="both", expand=True)
+        self.records_tree.heading("Site Name", text="Site Name")
+        self.records_tree.heading("Username", text="Username")
+        self.records_tree.heading("Password", text="Password")
+        self.records_tree.pack(fill=tk.BOTH, expand=True)
+        self.records_tree.bind('<<TreeviewSelect>>', self.on_record_select)
 
-        self.records_tree.bind('<<TreeviewSelect>>', self.on_record_select)  # Bind the selection event
+
+        # Bouton de déconnexion
+        logout_button = tk.Button(self.root, text="Logout", command=self.logout)
+        logout_button.grid(row=4, pady=10)
 
         self.load_records()
-        
-        # Ajout d'un bouton de déconnexion
-        logout_button = tk.Button(top_frame, text="Logout", command=self.logout)
-        logout_button.pack(side="right", padx=10, pady=10)
-
         
     def load_records(self):
         self.records_tree.delete(*self.records_tree.get_children())  # Clear previous entries
@@ -347,7 +352,10 @@ class PasswordManagerApp:
                 # Insert data with ID as 'iid'
                 self.records_tree.insert("", "end", iid=record_id, values=(site_name, username, password))
 
-    def save_record(self, website, username, password):
+    def save_record(self):
+        website = self.site_entry.get()
+        username = self.username_entry.get()
+        password = self.password_entry.get()
         if website and username and password:  # Vérification que les champs ne sont pas vides
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
@@ -358,11 +366,12 @@ class PasswordManagerApp:
             self.load_records()  # Recharger les enregistrements pour afficher le nouveau
         else:
             messagebox.showwarning("Warning", "Tous les champs sont requis!")
-
+        
         # Effacer les champs après enregistrement
         self.site_entry.delete(0, tk.END)
         self.username_entry.delete(0, tk.END)
         self.password_entry.delete(0, tk.END)
+
         
     def on_record_select(self, event):
         selected = self.records_tree.selection()
@@ -418,21 +427,29 @@ class PasswordManagerApp:
 
 
     def dynamic_search(self, event):
-        search_term = self.search_entry.get().strip()
-        self.records_tree.delete(*self.records_tree.get_children())  # Clear previous search results
+        search_term = self.search_entry.get().strip().lower()
         if search_term:
-            with sqlite3.connect(DB_NAME) as conn:
-                cursor = conn.cursor()
-                query = "SELECT ID, site_name, username_site, password FROM passwords WHERE site_name LIKE ? OR username_site LIKE ?"
-                cursor.execute(query, ('%{}%'.format(search_term), '%{}%'.format(search_term)))
-                records = cursor.fetchall()
-                for record in records:
-                    record_id, site_name, username, password = record
-                    self.records_tree.insert("", "end", iid=record_id, values=(site_name, username, password))
+            # Si le terme de recherche n'est pas vide, filtrer les items
+            visible_items = []
+            for item in self.records_tree.get_children():
+                item_values = self.records_tree.item(item, "values")
+                if search_term in " ".join(map(str, item_values)).lower():
+                    visible_items.append(item_values)  # Stocker les valeurs de l'élément, pas l'élément lui-même
+            # Mettre à jour l'affichage pour montrer uniquement les éléments correspondants
+            self.records_tree.delete(*self.records_tree.get_children())  # Supprime tous les éléments
+            for item_values in visible_items:
+                self.records_tree.insert('', 'end', values=item_values, tags='matched')
         else:
-            self.load_records()  # Reload all records if the search field is empty
+            # Recharger tous les enregistrements de la base de données lorsque la recherche est vide
+            self.load_records()
+
+        # Mettre à jour les couleurs pour les items correspondants
+        self.records_tree.tag_configure('matched', background='yellow')
+
+
 
     def logout(self):
+        
         # Réinitialisation des informations de session de l'utilisateur
         self.current_username = None
         self.encryption_key = None
