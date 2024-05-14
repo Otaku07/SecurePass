@@ -1,27 +1,22 @@
-import os
 import sqlite3
 import base64
 import secrets
-from tkinter import messagebox, simpledialog, ttk, Label
+from tkinter import messagebox, ttk, Label
 import re
 import tkinter as tk
 import bcrypt
-import cryptography.fernet
+#import cryptography.fernet
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.fernet import Fernet
-import cryptography
+#import cryptography
 
 
 # Constantes
 ITERATIONS = 100000
 SALT_SIZE = 32
 DB_NAME = "SecurePassBy.db"
-#BG_COLOR = "#f0f0f0"
-#FONT = ("Helvetica", 14)
-#BUTTON_FONT = ("Helvetica", 12, "bold")
-#LABEL_WIDTH = 20
 
 
 def generate_salt(size=SALT_SIZE):
@@ -38,12 +33,6 @@ def derive_key(password, salt):
     key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
     return key
 
-"""def setup_style():
-    style = ttk.Style()
-    style.configure("TLabel", background=BG_COLOR, font=FONT, width=LABEL_WIDTH)
-    style.configure("TButton", font=BUTTON_FONT, width=LABEL_WIDTH)
-    style.configure("TEntry", font=FONT, width=LABEL_WIDTH)
-    return style"""
 
 def encrypt_data(data, key):
     fernet = Fernet(key)
@@ -153,7 +142,6 @@ class PasswordManagerApp:
         self.login_button.grid(row=2, column=0, padx=10, pady=10)
         self.create_account_button = tk.Button(self.login_frame, text="Create Account", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.show_create_account_screen)
         self.create_account_button.grid(row=2, column=1, padx=10, pady=10)
-        #tk.Button(login_frame, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1, padx=10, pady=10)
     
     def disable_login_interface(self, disable=True):
         """ Désactiver ou activer les éléments de l'interface de connexion """
@@ -165,7 +153,6 @@ class PasswordManagerApp:
                 child.configure(state=state)
             except tk.TclError:
                 pass
-
 
 
     def show_countdown(self, remaining=None):
@@ -232,6 +219,10 @@ class PasswordManagerApp:
                         messagebox.showerror("Echec de connexion", "Mot de passe ou non d'utilisateur incorrect. Merci de réessayer.")
                         self.username_var.set('')
                         self.password_var.set('')
+            else:
+                messagebox.showerror("Echec de connexion", "Mot de passe ou non d'utilisateur incorrect. Merci de réessayer.")
+                self.username_var.set('')
+                self.password_var.set('')
             
     def show_create_account_screen(self):
         self.clear_screen()
@@ -372,7 +363,6 @@ class PasswordManagerApp:
         if website and username and password:  # Vérification que les champs ne sont pas vides
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                # S'assurer que l'ordre des valeurs correspond à l'ordre des colonnes dans la base de données
                 cursor.execute("INSERT INTO passwords (user_id, site_name, username_site, password) VALUES (?, ?, ?, ?)",
                             (self.current_user_id, website, username, password))
                 conn.commit()  # Appliquer les changements dans la base de données
@@ -392,7 +382,7 @@ class PasswordManagerApp:
             record = self.records_tree.item(selected[0], 'values')
             # Effacer le contenu actuel dans les champs
             self.site_entry.delete(0, tk.END)
-            self.site_entry.insert(0, record[0])  # Ajuster l'indice puisque la colonne ID est enlevée
+            self.site_entry.insert(0, record[0])
             self.username_entry.delete(0, tk.END)
             self.username_entry.insert(0, record[1])
             self.password_entry.delete(0, tk.END)
@@ -427,7 +417,6 @@ class PasswordManagerApp:
             selected_item = selected_items[0]
             with sqlite3.connect(DB_NAME) as conn:
                 cursor = conn.cursor()
-                # Ajouter une vérification pour s'assurer que l'enregistrement appartient à l'utilisateur connecté
                 cursor.execute("DELETE FROM passwords WHERE ID=? AND user_id=?", (selected_item, self.current_user_id))
                 conn.commit()
             self.load_records()
