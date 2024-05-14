@@ -18,6 +18,10 @@ import cryptography
 ITERATIONS = 100000
 SALT_SIZE = 32
 DB_NAME = "SecurePassBy.db"
+#BG_COLOR = "#f0f0f0"
+#FONT = ("Helvetica", 14)
+#BUTTON_FONT = ("Helvetica", 12, "bold")
+#LABEL_WIDTH = 20
 
 
 def generate_salt(size=SALT_SIZE):
@@ -33,6 +37,13 @@ def derive_key(password, salt):
     )
     key = base64.urlsafe_b64encode(kdf.derive(password.encode()))
     return key
+
+"""def setup_style():
+    style = ttk.Style()
+    style.configure("TLabel", background=BG_COLOR, font=FONT, width=LABEL_WIDTH)
+    style.configure("TButton", font=BUTTON_FONT, width=LABEL_WIDTH)
+    style.configure("TEntry", font=FONT, width=LABEL_WIDTH)
+    return style"""
 
 def encrypt_data(data, key):
     fernet = Fernet(key)
@@ -82,6 +93,7 @@ class PasswordManagerApp:
             PasswordManagerApp.conn = sqlite3.connect(DB_NAME)
         self.root.title("SecurePass Manager")
         self.root.geometry('900x540+100+100')
+        #self.root.configure(bg=BG_COLOR)
         self.countdown_window = None
         self.current_username = None
         self.encryption_key = None
@@ -129,17 +141,17 @@ class PasswordManagerApp:
         self.login_frame.grid()
 
         # Add the widgets to the login_frame instead of self.root
-        tk.Label(self.login_frame, text="Username:").grid(row=0, column=0, padx=10, pady=10)
+        tk.Label(self.login_frame, text="Username:", font=('Arial', 12, 'bold')).grid(row=0, column=0, padx=20, pady=15)
         self.username_var = tk.StringVar()
-        tk.Entry(self.login_frame, textvariable=self.username_var).grid(row=0, column=1, padx=10, pady=10)
+        tk.Entry(self.login_frame, textvariable=self.username_var, bd=2, relief='solid').grid(row=0, column=1, padx=20, pady=15)
 
-        tk.Label(self.login_frame, text="Password:").grid(row=1, column=0, padx=10, pady=10)
+        tk.Label(self.login_frame, text="Password:", font=('Arial', 12, 'bold')).grid(row=1, column=0, padx=20, pady=15)
         self.password_var = tk.StringVar()
-        tk.Entry(self.login_frame, textvariable=self.password_var, show='*').grid(row=1, column=1, padx=10, pady=10)
+        tk.Entry(self.login_frame, textvariable=self.password_var, bd=2, relief='solid', show='*').grid(row=1, column=1, padx=20, pady=15)
 
-        self.login_button = tk.Button(self.login_frame, text="Login", command=self.login)  # Store the login button in self.login_button
+        self.login_button = tk.Button(self.login_frame, text="Login", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.login)  # Store the login button in self.login_button
         self.login_button.grid(row=2, column=0, padx=10, pady=10)
-        self.create_account_button = tk.Button(self.login_frame, text="Create Account", command=self.show_create_account_screen)
+        self.create_account_button = tk.Button(self.login_frame, text="Create Account", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.show_create_account_screen)
         self.create_account_button.grid(row=2, column=1, padx=10, pady=10)
         #tk.Button(login_frame, text="Create Account", command=self.show_create_account_screen).grid(row=2, column=1, padx=10, pady=10)
     
@@ -229,32 +241,33 @@ class PasswordManagerApp:
         create_account_frame.place(relx=0.5, rely=0.5, anchor='center')
 
         # Champ Username
-        tk.Label(create_account_frame, text="Username:", font=("Helvetica", 14)).grid(row=1, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(create_account_frame, text="Username:", font=("Arial", 12, 'bold'), fg='black').grid(row=1, column=0, sticky='e', padx=20, pady=15)
         self.new_username_var = tk.StringVar()
-        username_entry = tk.Entry(create_account_frame, textvariable=self.new_username_var, font=("Helvetica", 14), bd=2, relief='solid')
-        username_entry.grid(row=1, column=1, padx=10, pady=10)
+        username_entry = tk.Entry(create_account_frame, textvariable=self.new_username_var, font=("Arial", 12), bd=2, relief='solid')
+        username_entry.grid(row=1, column=1, padx=20, pady=15)
 
         # Champ Password
-        tk.Label(create_account_frame, text="Password:", font=("Helvetica", 14)).grid(row=2, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(create_account_frame, text="Password:", font=("Arial", 12, 'bold'), fg='black').grid(row=2, column=0, sticky='e', padx=20, pady=15)
         self.new_password_var = tk.StringVar()
-        password_entry = tk.Entry(create_account_frame, textvariable=self.new_password_var, show='*', font=("Helvetica", 14), bd=2, relief='solid')
-        password_entry.grid(row=2, column=1, padx=10, pady=10)
+        password_entry = tk.Entry(create_account_frame, textvariable=self.new_password_var, show='*', font=("Arial", 12), bd=2, relief='solid')
+        password_entry.grid(row=2, column=1, padx=20, pady=15)
 
         # Champ Confirm Password
-        tk.Label(create_account_frame, text="Confirm Password:", font=("Helvetica", 14)).grid(row=3, column=0, sticky='e', padx=10, pady=10)
+        tk.Label(create_account_frame, text="Confirm Password:", font=("Arial", 12, 'bold'), fg='black').grid(row=3, column=0, sticky='e', padx=20, pady=15)
         self.confirm_password_var = tk.StringVar()
-        confirm_password_entry = tk.Entry(create_account_frame, textvariable=self.confirm_password_var, show='*', font=("Helvetica", 14), bd=2, relief='solid')
+        confirm_password_entry = tk.Entry(create_account_frame, textvariable=self.confirm_password_var, show='*', font=("Arial", 12), bd=2, relief='solid')
         confirm_password_entry.grid(row=3, column=1, padx=10, pady=10)
 
         # Boutons
-        create_btn = tk.Button(create_account_frame, text="Create Account", font=("Helvetica", 14), command=self.create_account)
-        create_btn.grid(row=4, column=1, padx=10, pady=(20, 10), sticky='e')
+        create_btn = tk.Button(create_account_frame, text="Create Account", font=("Arial", 12, 'bold'), command=self.create_account, bg='blue', fg='white')
+        create_btn.grid(row=4, column=1, padx=10, pady=10, sticky='e')
 
-        cancel_btn = tk.Button(create_account_frame, text="Cancel", font=("Helvetica", 14), command=self.show_login_screen)
-        cancel_btn.grid(row=4, column=0, padx=10, pady=(20, 10), sticky='e')
+        cancel_btn = tk.Button(create_account_frame, text="Cancel", font=("Arial", 12, 'bold'), command=self.show_login_screen, bg='blue', fg='white')
+        cancel_btn.grid(row=4, column=0, padx=10, pady=10, sticky='e')
 
         # Mettre le focus sur le champ Username à l'ouverture
         username_entry.focus_set()
+
 
     def create_account(self):
         username = self.new_username_var.get()
@@ -282,7 +295,7 @@ class PasswordManagerApp:
                 messagebox.showinfo("Success", "Compte créé avec succès!")
 
         except sqlite3.IntegrityError:
-            messagebox.showerror("Error", "L'tilisateur existe déjà")
+            messagebox.showerror("Error", "L'utilisateur existe déjà")
             
         self.show_login_screen()
             
@@ -320,9 +333,9 @@ class PasswordManagerApp:
 
         # Boutons de gestion des enregistrements
         
-        tk.Button(entry_frame, text="Save", command=self.save_record).grid(row=2, column=0, padx=5, pady=10)
-        tk.Button(entry_frame, text="Update", command=self.update_record).grid(row=2, column=1, padx=5, pady=10)
-        tk.Button(entry_frame, text="Delete", command=self.delete_record).grid(row=2, column=2, padx=5, pady=10)
+        tk.Button(entry_frame, text="Save", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.save_record).grid(row=2, column=0, padx=15, pady=5)
+        tk.Button(entry_frame, text="Update", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.update_record).grid(row=2, column=1, padx=15, pady=5)
+        tk.Button(entry_frame, text="Delete", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.delete_record).grid(row=2, column=2, padx=15, pady=5)
 
         # Affichage des enregistrements
         records_frame = tk.Frame(self.root)
@@ -336,7 +349,7 @@ class PasswordManagerApp:
 
 
         # Bouton de déconnexion
-        logout_button = tk.Button(self.root, text="Logout", command=self.logout)
+        logout_button = tk.Button(self.root, text="Logout", bg='blue', fg='white', font=('Arial', 12, 'bold'), command=self.logout)
         logout_button.grid(row=4, pady=10)
 
         self.load_records()
