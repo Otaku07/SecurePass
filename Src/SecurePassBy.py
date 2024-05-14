@@ -306,19 +306,19 @@ class PasswordManagerApp:
 
         # Labels et champs de saisie
         tk.Label(entry_frame, text="Site Name").grid(row=0, column=0, sticky='ew')
-        self.site_entry = tk.Entry(entry_frame)
+        self.site_entry = tk.Entry(entry_frame, bd=2, relief='solid')
         self.site_entry.grid(row=1, column=0, sticky='ew', padx=5)
 
         tk.Label(entry_frame, text="Username").grid(row=0, column=1, sticky='ew')
-        self.username_entry = tk.Entry(entry_frame)
+        self.username_entry = tk.Entry(entry_frame, bd=2, relief='solid')
         self.username_entry.grid(row=1, column=1, sticky='ew', padx=5)
 
         tk.Label(entry_frame, text="Password").grid(row=0, column=2, sticky='ew')
-        self.password_entry = tk.Entry(entry_frame, show='*')
+        self.password_entry = tk.Entry(entry_frame, show='*', bd=2, relief='solid')
         self.password_entry.grid(row=1, column=2, sticky='ew', padx=5)
 
         tk.Label(entry_frame, text="Search").grid(row=0, column=3, sticky='ew')
-        self.search_entry = tk.Entry(entry_frame)
+        self.search_entry = tk.Entry(entry_frame, bd=2, relief='solid')
         self.search_entry.grid(row=1, column=3, sticky='ew', padx=5)
         self.search_entry.bind('<KeyRelease>', self.dynamic_search)
 
